@@ -1,0 +1,26 @@
+{
+  "name": "@copilot/infra",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "jest",
+    "cdk": "cdk",
+    "synth": "npm run build && cdk synth"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "2.270.0",
+    "constructs": "10.8.1"
+  },
+  "devDependencies": {
+    "@types/jest": "30.0.0",
+    "@types/node": "24.13.6",
+    "aws-cdk": "2.1143.0",
+    "jest": "30.5.2",
+    "ts-jest": "29.4.13",
+    "typescript": "6.0.3"
+  }
+}

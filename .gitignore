@@ -29,10 +29,5 @@ apps/web/next-env.d.ts
 
 # CDK
 infra/cdk.out/
-infra/lib/**/*.js
-infra/lib/**/*.d.ts
-infra/bin/**/*.js
-infra/bin/**/*.d.ts
-infra/test/**/*.js
-infra/test/**/*.d.ts
+infra/dist/
 .claude/launch.json
