@@ -1,6 +1,8 @@
 API_DIR := services/api
 WEB_DIR := apps/web
 INFRA_DIR := infra
+# Uses the pnpm version pinned in apps/web/package.json via corepack (ships with Node 24).
+PNPM ?= corepack pnpm
 
 .PHONY: up down test test-integration lint typecheck
 
@@ -19,9 +21,9 @@ test-integration: ## Integration tests against the compose stack (run `make up` 
 
 lint:
 	cd $(API_DIR) && uv run ruff check . && uv run ruff format --check .
-	cd $(WEB_DIR) && pnpm lint
+	cd $(WEB_DIR) && $(PNPM) lint
 
 typecheck:
 	cd $(API_DIR) && uv run mypy
-	cd $(WEB_DIR) && pnpm typecheck
+	cd $(WEB_DIR) && $(PNPM) typecheck
 	cd $(INFRA_DIR) && npm run build

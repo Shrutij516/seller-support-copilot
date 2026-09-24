@@ -35,3 +35,4 @@ infra/bin/**/*.js
 infra/bin/**/*.d.ts
 infra/test/**/*.js
 infra/test/**/*.d.ts
+.claude/launch.json
