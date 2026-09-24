@@ -1,0 +1,37 @@
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# Node
+node_modules/
+.pnpm-store/
+*.tsbuildinfo
+
+# Next.js
+apps/web/.next/
+apps/web/out/
+apps/web/next-env.d.ts
+
+# CDK
+infra/cdk.out/
+infra/lib/**/*.js
+infra/lib/**/*.d.ts
+infra/bin/**/*.js
+infra/bin/**/*.d.ts
+infra/test/**/*.js
+infra/test/**/*.d.ts
