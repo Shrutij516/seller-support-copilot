@@ -1,0 +1,9 @@
+**/node_modules/
+**/.next/
+**/out/
+**/dist/
+**/cdk.out/
+**/.venv/
+pnpm-lock.yaml
+package-lock.json
+uv.lock

@@ -22,7 +22,11 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
 }
 
 main {
@@ -37,9 +41,15 @@ main {
   padding: 1rem 1.25rem;
 }
 
-.muted { color: var(--muted); }
-.ok { color: var(--ok); }
-.err { color: var(--err); }
+.muted {
+  color: var(--muted);
+}
+.ok {
+  color: var(--ok);
+}
+.err {
+  color: var(--err);
+}
 
 button {
   margin-top: 0.75rem;
