@@ -78,6 +78,7 @@ filterwarnings = [
 [tool.coverage.run]
 source = ["copilot_api"]
 branch = true
+concurrency = ["greenlet", "thread"]
 
 [tool.coverage.report]
 # Business logic mostly lives behind integration tests (real Postgres/DynamoDB); the
