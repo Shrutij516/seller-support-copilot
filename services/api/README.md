@@ -10,4 +10,4 @@ uv run pytest -m integration                   # needs `make up` first
 uv run ruff check . && uv run ruff format --check . && uv run mypy
 ```
 
-Endpoints: `GET /healthz` (liveness, no dependencies), `GET /readyz` (checks Postgres and Redis, 503 on failure).
+Endpoints: `GET /healthz` (liveness, no dependencies), `GET /readyz` (checks Postgres and DynamoDB, 503 on failure).

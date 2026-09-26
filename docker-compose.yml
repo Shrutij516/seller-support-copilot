@@ -16,12 +16,13 @@ services:
       timeout: 3s
       retries: 10
 
-  redis:
-    image: redis:7-alpine
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
     ports:
-      - "6379:6379"
+      - "8001:8000"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      # No -f: DynamoDB Local answers plain GET / with 400, which still proves it's up.
+      test: ["CMD-SHELL", "curl -s -o /dev/null http://localhost:8000/"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -32,14 +33,17 @@ services:
       APP_ENV: local
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       DATABASE_URL: postgresql://${POSTGRES_USER:-copilot}:${POSTGRES_PASSWORD:-copilot}@postgres:5432/${POSTGRES_DB:-copilot}
-      REDIS_URL: redis://redis:6379/0
+      DYNAMODB_ENDPOINT_URL: http://dynamodb-local:8000
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-dummy}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-dummy}
       CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-http://localhost:3000}
     ports:
       - "8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
+      dynamodb-local:
         condition: service_healthy
     # Healthcheck is defined in the Dockerfile (GET /healthz).
 

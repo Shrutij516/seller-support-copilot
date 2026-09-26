@@ -32,18 +32,21 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
-      redis:
-        image: redis:7-alpine
+      dynamodb-local:
+        image: amazon/dynamodb-local:latest
         ports:
-          - 6379:6379
+          - 8000:8000
         options: >-
-          --health-cmd "redis-cli ping"
+          --health-cmd "curl -s -o /dev/null http://localhost:8000/"
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
     env:
       DATABASE_URL: postgresql://copilot:copilot@localhost:5432/copilot
-      REDIS_URL: redis://localhost:6379/0
+      DYNAMODB_ENDPOINT_URL: http://localhost:8000
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: dummy
+      AWS_SECRET_ACCESS_KEY: dummy
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10

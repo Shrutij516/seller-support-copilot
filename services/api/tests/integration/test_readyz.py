@@ -9,9 +9,9 @@ from copilot_api.main import app
 pytestmark = pytest.mark.integration
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://copilot:copilot@localhost:5432/copilot")
-REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+DYNAMODB_ENDPOINT_URL = os.environ.get("DYNAMODB_ENDPOINT_URL", "http://localhost:8001")
 # Nothing listens on port 1, so connections are refused immediately.
-UNREACHABLE_REDIS_URL = "redis://localhost:1/0"
+UNREACHABLE_DYNAMODB_ENDPOINT_URL = "http://localhost:1"
 
 
 def _client_with(settings: Settings) -> TestClient:
@@ -25,18 +25,22 @@ def _clear_overrides() -> None:
 
 
 def test_readyz_ok_when_dependencies_up() -> None:
-    client = _client_with(Settings(database_url=DATABASE_URL, redis_url=REDIS_URL))
+    client = _client_with(
+        Settings(database_url=DATABASE_URL, dynamodb_endpoint_url=DYNAMODB_ENDPOINT_URL)
+    )
     response = client.get("/readyz")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "checks": {"postgres": "ok", "redis": "ok"}}
+    assert response.json() == {"status": "ok", "checks": {"postgres": "ok", "dynamodb": "ok"}}
 
 
 def test_readyz_503_names_failed_dependency() -> None:
-    client = _client_with(Settings(database_url=DATABASE_URL, redis_url=UNREACHABLE_REDIS_URL))
+    client = _client_with(
+        Settings(database_url=DATABASE_URL, dynamodb_endpoint_url=UNREACHABLE_DYNAMODB_ENDPOINT_URL)
+    )
     response = client.get("/readyz")
     assert response.status_code == 503
     assert response.json() == {
         "status": "fail",
-        "checks": {"postgres": "ok", "redis": "fail"},
-        "failed": ["redis"],
+        "checks": {"postgres": "ok", "dynamodb": "fail"},
+        "failed": ["dynamodb"],
     }

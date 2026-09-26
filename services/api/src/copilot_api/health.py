@@ -2,8 +2,9 @@ import asyncio
 import logging
 from typing import Any
 
+import boto3
 import psycopg
-import redis.asyncio as redis
+from botocore.config import Config as BotoConfig
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
@@ -20,12 +21,22 @@ async def check_postgres(settings: Settings) -> None:
         await conn.execute("SELECT 1")
 
 
-async def check_redis(settings: Settings) -> None:
-    client = redis.from_url(settings.redis_url, socket_timeout=settings.readiness_timeout_seconds)
-    try:
-        await client.ping()
-    finally:
-        await client.aclose()
+async def check_dynamodb(settings: Settings) -> None:
+    def _list_tables() -> None:
+        client = boto3.client(
+            "dynamodb",
+            region_name=settings.aws_region,
+            endpoint_url=settings.dynamodb_endpoint_url,
+            config=BotoConfig(
+                connect_timeout=settings.readiness_timeout_seconds,
+                read_timeout=settings.readiness_timeout_seconds,
+                retries={"max_attempts": 0},
+            ),
+        )
+        # Cheapest real call: no tables to create/read yet, this is just connectivity.
+        client.list_tables(Limit=1)
+
+    await asyncio.to_thread(_list_tables)
 
 
 @router.get("/healthz")
@@ -35,7 +46,7 @@ async def healthz() -> dict[str, str]:
 
 @router.get("/readyz", responses={503: {"description": "One or more dependencies failed"}})
 async def readyz(settings: Settings = Depends(get_settings)) -> JSONResponse:  # noqa: B008
-    checks = {"postgres": check_postgres, "redis": check_redis}
+    checks = {"postgres": check_postgres, "dynamodb": check_dynamodb}
     results = await asyncio.gather(
         *(
             asyncio.wait_for(check(settings), timeout=settings.readiness_timeout_seconds)

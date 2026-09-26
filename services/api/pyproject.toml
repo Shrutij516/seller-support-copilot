@@ -9,7 +9,7 @@ dependencies = [
     "uvicorn[standard]>=0.53.0",
     "pydantic-settings>=2.15.0",
     "psycopg[binary]>=3.3.6",
-    "redis>=8.1.0",
+    "boto3>=1.40.0",
 ]
 
 [dependency-groups]
@@ -18,6 +18,7 @@ dev = [
     "httpx>=0.28.1",
     "ruff>=0.16.8",
     "mypy>=2.3.1",
+    "boto3-stubs[dynamodb]>=1.40.0",
 ]
 
 [build-system]
@@ -46,5 +47,5 @@ files = ["src", "tests"]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers -m 'not integration'"
 markers = [
-    "integration: needs real Postgres and Redis (run with `pytest -m integration`)",
+    "integration: needs real Postgres and DynamoDB Local (run with `pytest -m integration`)",
 ]

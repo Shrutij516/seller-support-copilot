@@ -6,7 +6,7 @@ PNPM ?= corepack pnpm
 
 .PHONY: up down test test-integration lint typecheck
 
-up: ## Start Postgres, Redis, and the API; wait until healthy
+up: ## Start Postgres, DynamoDB Local, and the API; wait until healthy
 	docker compose up -d --build --wait
 
 down: ## Stop the stack (keeps the Postgres volume; add -v to drop it)
@@ -17,7 +17,8 @@ test: ## Unit tests (no external dependencies)
 	cd $(INFRA_DIR) && npm test
 
 test-integration: ## Integration tests against the compose stack (run `make up` first)
-	cd $(API_DIR) && uv run pytest -m integration
+	cd $(API_DIR) && AWS_REGION=us-east-1 AWS_ACCESS_KEY_ID=dummy AWS_SECRET_ACCESS_KEY=dummy \
+		uv run pytest -m integration
 
 lint:
 	cd $(API_DIR) && uv run ruff check . && uv run ruff format --check .

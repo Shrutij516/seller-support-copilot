@@ -2,19 +2,22 @@
 
 An AI support assistant that helps e-commerce sellers get answers about marketplace policies, their orders, and their listings.
 
-Status: Phase 0 (scaffolding). Stack: Next.js + TypeScript, FastAPI, Postgres, Redis, AWS Bedrock, AWS CDK.
+Status: Phase 0 (scaffolding). Core stack: Next.js + TypeScript, FastAPI, Postgres, DynamoDB, Cognito,
+AWS Bedrock (Knowledge Bases, Guardrails, tool calling, structured outputs), OpenTelemetry +
+CloudWatch/X-Ray, pytest + Playwright, Docker, GitHub Actions, ECS Fargate. SQS and CDK are stretch
+goals, added after the core works. See [DECISIONS.md](DECISIONS.md) for what each piece does and why.
 
 ## Repository layout
 
-| Path                  | What                                                  |
-| --------------------- | ----------------------------------------------------- |
-| `apps/web`            | Next.js front end (static export for S3 + CloudFront) |
-| `services/api`        | FastAPI backend                                       |
-| `services/ingest`     | Document ingestion (placeholder)                      |
-| `packages/api-client` | Generated TypeScript API client (placeholder)         |
-| `infra`               | AWS CDK app (currently `BudgetStack`)                 |
-| `evals`, `data`       | Evaluation suites and sample data (placeholders)      |
-| `docs/adr`            | Architecture decision records                         |
+| Path                  | What                                                                                    |
+| --------------------- | --------------------------------------------------------------------------------------- |
+| `apps/web`            | Next.js front end (static export for S3 + CloudFront)                                   |
+| `services/api`        | FastAPI backend                                                                         |
+| `services/ingest`     | Document ingestion (placeholder)                                                        |
+| `packages/api-client` | Generated TypeScript API client (placeholder)                                           |
+| `infra`               | AWS CDK app (currently `BudgetStack`); parked, not deployed until CDK moves off stretch |
+| `evals`, `data`       | Evaluation suites and sample data (placeholders)                                        |
+| `DECISIONS.md`        | What each component does, why we chose it, and what we rejected                         |
 
 ## Prerequisites
 
@@ -26,7 +29,7 @@ Status: Phase 0 (scaffolding). Stack: Next.js + TypeScript, FastAPI, Postgres, R
 ## Local setup
 
 ```bash
-make up                                                      # Postgres, Redis, API on :8000
+make up                                                      # Postgres, DynamoDB Local, API on :8000
 make test && make test-integration                           # unit, then integration tests
 cp apps/web/.env.example apps/web/.env.local
 cd apps/web && corepack pnpm install && corepack pnpm dev    # web on :3000

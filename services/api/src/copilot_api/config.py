@@ -9,7 +9,10 @@ class Settings(BaseSettings):
     app_env: str = "local"
     log_level: str = "INFO"
     database_url: str = "postgresql://copilot:copilot@localhost:5432/copilot"
-    redis_url: str = "redis://localhost:6379/0"
+    # Set only for local dev, where it points at DynamoDB Local; unset (None) in AWS so
+    # boto3 talks to the real DynamoDB endpoint for aws_region.
+    dynamodb_endpoint_url: str | None = None
+    aws_region: str = "us-east-1"
     readiness_timeout_seconds: float = 2.0
     # Comma-separated list of browser origins allowed to call the API.
     cors_allow_origins: str = "http://localhost:3000"
