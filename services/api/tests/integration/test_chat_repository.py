@@ -1,5 +1,4 @@
 import uuid
-from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -11,18 +10,12 @@ from copilot_api.dynamo.chat_repository import (
     SessionNotFoundError,
 )
 from copilot_api.dynamo.client import create_dynamodb_client
-from copilot_api.dynamo.table import TABLE_NAME, TTL_ATTRIBUTE
+from copilot_api.dynamo.table import TTL_ATTRIBUTE
 
 pytestmark = pytest.mark.integration
 
-
-@pytest.fixture
-async def repo() -> AsyncIterator[ChatRepository]:
-    client = create_dynamodb_client(get_settings())
-    try:
-        yield ChatRepository(client)
-    finally:
-        client.close()
+# `repo` and `chat_table_name` come from tests/integration/conftest.py: bound to the
+# isolated "chat_test" table, never the dev "chat" one.
 
 
 async def test_create_session_creates_meta_item(repo: ChatRepository) -> None:
@@ -84,7 +77,9 @@ async def test_list_sessions_for_seller_returns_newest_first(repo: ChatRepositor
     assert session_ids.index(newer.session_id) < session_ids.index(older.session_id)
 
 
-async def test_session_and_message_expires_at_set_for_ttl(repo: ChatRepository) -> None:
+async def test_session_and_message_expires_at_set_for_ttl(
+    repo: ChatRepository, chat_table_name: str
+) -> None:
     seller_id = str(uuid.uuid4())
     before = datetime.now(UTC) + timedelta(days=SESSION_TTL_DAYS - 1)
     session = await repo.create_session(seller_id, title="Expiring session")
@@ -93,12 +88,12 @@ async def test_session_and_message_expires_at_set_for_ttl(repo: ChatRepository) 
 
     client = create_dynamodb_client(get_settings())
     try:
-        ttl = client.describe_time_to_live(TableName=TABLE_NAME)
+        ttl = client.describe_time_to_live(TableName=chat_table_name)
         assert ttl["TimeToLiveDescription"]["TimeToLiveStatus"] in ("ENABLED", "ENABLING")
         assert ttl["TimeToLiveDescription"]["AttributeName"] == TTL_ATTRIBUTE
 
         item = client.get_item(
-            TableName=TABLE_NAME,
+            TableName=chat_table_name,
             Key={"PK": {"S": f"SESSION#{session.session_id}"}, "SK": {"S": "META"}},
         )["Item"]
         expires_at = datetime.fromtimestamp(int(item["expires_at"]["N"]), UTC)

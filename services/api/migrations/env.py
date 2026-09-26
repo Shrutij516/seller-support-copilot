@@ -1,3 +1,4 @@
+import os
 from logging.config import fileConfig
 
 from alembic import context
@@ -18,9 +19,12 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 # DATABASE_URL (via Settings) is the single source of truth for where migrations run;
-# alembic.ini carries no connection string. psycopg (v3) works fine synchronously here,
-# even though the app itself uses it through SQLAlchemy's async engine.
-_database_url = get_settings().database_url.replace("postgresql://", "postgresql+psycopg://", 1)
+# alembic.ini carries no connection string. TEST_DATABASE_URL, set only by the integration
+# test fixture that migrates the isolated test database, takes priority over it. psycopg (v3)
+# works fine synchronously here, even though the app itself uses it through SQLAlchemy's
+# async engine.
+_database_url = os.environ.get("TEST_DATABASE_URL") or get_settings().database_url
+_database_url = _database_url.replace("postgresql://", "postgresql+psycopg://", 1)
 config.set_main_option("sqlalchemy.url", _database_url)
 
 

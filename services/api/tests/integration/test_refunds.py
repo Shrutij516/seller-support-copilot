@@ -1,6 +1,5 @@
 import asyncio
 import uuid
-from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from unittest import mock
 
@@ -8,8 +7,6 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from copilot_api.config import get_settings
-from copilot_api.db import create_engine, create_session_factory
 from copilot_api.models import Order, OrderStatus, Seller, SupportCase
 from copilot_api.services.refunds import (
     REFUND_WINDOW_DAYS,
@@ -21,14 +18,8 @@ from copilot_api.services.refunds import (
 
 pytestmark = pytest.mark.integration
 
-
-@pytest.fixture
-async def session_factory() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
-    engine = create_engine(get_settings())
-    try:
-        yield create_session_factory(engine)
-    finally:
-        await engine.dispose()
+# `session_factory` comes from tests/integration/conftest.py: bound to the isolated
+# `copilot_test` database, truncated after every test.
 
 
 async def _make_seller(session: AsyncSession) -> Seller:
