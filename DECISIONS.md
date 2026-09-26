@@ -80,12 +80,48 @@ build; don't let it drift from the code.
 
 ## Cognito
 
-- Status: Planned (phase 2)
-- What it does: Handles seller/admin authentication and issues JWTs with a `cognito:groups` claim (seller or admin). Authorization, what each role can actually do, is enforced in our API code, not by Cognito.
+- Status: In use (token verification code); the actual User Pool isn't deployed yet
+- What it does: Issues JWTs with a `cognito:groups` claim (seller or admin). Authorization, what each role can actually do, is enforced in our API code, not by Cognito.
 - Why we chose it: Managed auth with native AWS integration; I don't build or store passwords myself.
 - Rejected alternative: Custom auth (JWT plus a users table). More code to secure and maintain for something Cognito already does.
 - Tradeoff we accept: Less UI and token customization than rolling it myself; some config lives outside app code.
 - Revisit if: Auth needs (SSO, custom MFA) outgrow what Cognito supports cleanly.
+
+## JWT verification in the API (not an API Gateway authorizer)
+
+- Status: In use
+- What it does: The API itself fetches JWKS, checks the RS256 signature, `iss`, `exp`, `token_use == "access"`, and `client_id`, on every request. Nothing upstream has already done this by the time a request reaches a route handler.
+- Why we chose it: There's no API Gateway in front of this service yet (it runs on ECS behind an ALB); an ALB doesn't verify JWTs the way API Gateway's Cognito authorizer does. Verifying in-process also means the exact same code path is what integration tests exercise, with a locally generated key, no real AWS call required.
+- Rejected alternative: An API Gateway Cognito authorizer in front of the service. Offloads verification before a request hits the API, but requires API Gateway in the stack (not currently planned) and makes the auth logic untestable without a real or emulated Gateway.
+- Tradeoff we accept: Every request pays a JWKS cache lookup and a signature check in-process, and the API is the thing that must stay correct and current on token verification, not a managed layer in front of it.
+- Revisit if: API Gateway gets added for other reasons (throttling, a public API surface); a Cognito authorizer there would then handle this and the API could trust a pre-verified principal header instead.
+
+## 404, not 403, for cross-tenant access
+
+- Status: In use
+- What it does: A seller requesting another seller's order, case, or chat session gets 404. A seller calling an admin-only route gets 403.
+- Why we chose it: 403 confirms a resource exists and you're just not allowed to see it; for IDs a seller might guess or enumerate (orders, cases), that confirmation is itself information leakage. 403 is the right signal only when the _route_ is restricted (admin endpoints), not when a specific resource is.
+- Rejected alternative: 403 everywhere for consistency. Simpler to reason about in isolation, but wrong for owned resources: it tells an attacker "this order ID is real, you just can't have it."
+- Tradeoff we accept: A seller who mistypes their own order ID sees the same 404 as one who's probing someone else's; slightly less helpful error messages in exchange for not leaking existence.
+- Revisit if: A support/debugging need requires distinguishing "doesn't exist" from "not yours" in a response, which would have to go through logs, not the API response.
+
+## Keyset (seek) pagination over offset
+
+- Status: In use (`GET /v1/orders`)
+- What it does: Pages on `(placed_at, id)` with an opaque cursor, instead of `LIMIT/OFFSET`.
+- Why we chose it: Offset pagination shifts under concurrent writes: an order inserted between two page fetches shifts every row after it, causing skipped or duplicated results. Keyset pagination has no such window, since each page's query is "everything before this exact key," not "the Nth through Mth row."
+- Rejected alternative: `OFFSET`/`LIMIT`. Familiar and simpler to implement, but gets slower on deep pages (the DB still scans and discards every skipped row) and isn't stable under concurrent inserts.
+- Tradeoff we accept: No "jump to page 7," only forward paging from a cursor. Fine for an API meant to be paged through, not randomly accessed.
+- Revisit if: A UI need genuinely requires arbitrary page jumps, not just "next."
+
+## application/problem+json for every error
+
+- Status: In use
+- What it does: Every 4xx/5xx response (ours, FastAPI's validation errors, routing 404s, unhandled exceptions) is RFC 9457 problem+json: `type`, `title`, `status`, `detail`, and `request_id`. Never a stack trace or raw SQL in the body.
+- Why we chose it: One consistent error shape means a frontend (or this API's own future consumers) writes one error-handling path, not a different shape per failure mode. `request_id` ties a client-visible error back to a specific log line.
+- Rejected alternative: FastAPI's default validation error shape for 422s, ad hoc `{"detail": "..."}` for everything else. Works, but two shapes instead of one, and nothing links a response back to server logs.
+- Tradeoff we accept: A little more error-handling boilerplate (one registered handler per exception type) than just letting FastAPI's defaults through.
+- Revisit if: A consumer needs `type` to be a real, dereferenceable URI per error kind rather than `about:blank`; that's the RFC 9457 extension point already there when it's needed.
 
 ## Bedrock (Knowledge Bases, Guardrails, tool calling, structured outputs)
 
@@ -166,3 +202,4 @@ build; don't let it drift from the code.
 - **CDK**: Stretch. `infra/` stays in the repo (currently just `BudgetStack`) but new infra is deployed by hand until CDK earns its place; its CI job keeps running so it doesn't rot.
 - **Lambda**: Not needed in core. Natural fit for the stretch SQS ingestion worker (bursty, event-triggered).
 - **Spring Boot**: Rejected. Common at Amazon, but my Java is coursework-only; FastAPI is the choice I can defend in depth.
+- **Rate limiting**: Deferred. No Redis (see above) to back a token bucket in the app itself, and it's the wrong layer for it anyway. Revisit with an API Gateway usage plan or WAF rate-based rule at deploy time, in front of the API rather than inside it.
