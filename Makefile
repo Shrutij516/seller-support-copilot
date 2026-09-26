@@ -4,7 +4,7 @@ INFRA_DIR := infra
 # Uses the pnpm version pinned in apps/web/package.json via corepack (ships with Node 24).
 PNPM ?= corepack pnpm
 
-.PHONY: up down test test-integration lint typecheck migrate dynamodb-init seed coverage
+.PHONY: up down test test-integration lint typecheck migrate dynamodb-init seed coverage openapi openapi-check
 
 up: ## Start Postgres, DynamoDB Local, and the API; wait until healthy
 	docker compose up -d --build --wait
@@ -35,6 +35,15 @@ test-integration: migrate dynamodb-init ## Integration tests against the compose
 
 coverage: test test-integration ## Combined unit + integration coverage; fails under 85% for services/api
 	cd $(API_DIR) && uv run coverage report --fail-under=85
+
+openapi: ## Regenerate services/api/openapi.json from the current app
+	cd $(API_DIR) && AWS_REGION=us-east-1 AWS_ACCESS_KEY_ID=dummy AWS_SECRET_ACCESS_KEY=dummy \
+		uv run python -m copilot_api.scripts.export_openapi
+
+openapi-check: ## Fail if openapi.json is out of date with the code (used by CI)
+	cd $(API_DIR) && AWS_REGION=us-east-1 AWS_ACCESS_KEY_ID=dummy AWS_SECRET_ACCESS_KEY=dummy \
+		uv run python -m copilot_api.scripts.export_openapi
+	git diff --exit-code -- $(API_DIR)/openapi.json
 
 lint:
 	cd $(API_DIR) && uv run ruff check . && uv run ruff format --check .

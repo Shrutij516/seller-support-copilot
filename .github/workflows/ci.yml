@@ -72,6 +72,10 @@ jobs:
         run: uv run pytest -m integration --cov=copilot_api --cov-append --cov-report=term-missing
       - name: Coverage gate (85%)
         run: uv run coverage report --fail-under=85
+      - name: OpenAPI contract is up to date
+        run: |
+          uv run python -m copilot_api.scripts.export_openapi
+          git diff --exit-code -- openapi.json
 
   web:
     runs-on: ubuntu-latest
