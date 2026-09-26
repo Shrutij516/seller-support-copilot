@@ -4,7 +4,7 @@ INFRA_DIR := infra
 # Uses the pnpm version pinned in apps/web/package.json via corepack (ships with Node 24).
 PNPM ?= corepack pnpm
 
-.PHONY: up down test test-integration lint typecheck migrate dynamodb-init seed
+.PHONY: up down test test-integration lint typecheck migrate dynamodb-init seed coverage
 
 up: ## Start Postgres, DynamoDB Local, and the API; wait until healthy
 	docker compose up -d --build --wait
@@ -24,13 +24,17 @@ seed: migrate ## Seed deterministic synthetic data (sellers, listings, orders); 
 	cd $(API_DIR) && AWS_REGION=us-east-1 AWS_ACCESS_KEY_ID=dummy AWS_SECRET_ACCESS_KEY=dummy \
 		uv run python -m copilot_api.scripts.seed
 
-test: ## Unit tests (no external dependencies)
-	cd $(API_DIR) && uv run pytest
+test: ## Unit tests (no external dependencies); reports coverage
+	cd $(API_DIR) && uv run pytest --cov=copilot_api --cov-report=term-missing
 	cd $(INFRA_DIR) && npm test
 
 test-integration: migrate dynamodb-init ## Integration tests against the compose stack (run `make up` first)
 	cd $(API_DIR) && AWS_REGION=us-east-1 AWS_ACCESS_KEY_ID=dummy AWS_SECRET_ACCESS_KEY=dummy \
-		DYNAMODB_ENDPOINT_URL=http://localhost:8001 uv run pytest -m integration
+		DYNAMODB_ENDPOINT_URL=http://localhost:8001 \
+		uv run pytest -m integration --cov=copilot_api --cov-append --cov-report=term-missing
+
+coverage: test test-integration ## Combined unit + integration coverage; fails under 85% for services/api
+	cd $(API_DIR) && uv run coverage report --fail-under=85
 
 lint:
 	cd $(API_DIR) && uv run ruff check . && uv run ruff format --check .

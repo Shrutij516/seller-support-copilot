@@ -67,9 +67,11 @@ jobs:
       - name: Create DynamoDB "chat" table
         run: uv run python -m copilot_api.scripts.dynamodb_init
       - name: Unit tests
-        run: uv run pytest
+        run: uv run pytest --cov=copilot_api --cov-report=term-missing
       - name: Integration tests
-        run: uv run pytest -m integration
+        run: uv run pytest -m integration --cov=copilot_api --cov-append --cov-report=term-missing
+      - name: Coverage gate (85%)
+        run: uv run coverage report --fail-under=85
 
   web:
     runs-on: ubuntu-latest

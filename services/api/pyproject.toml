@@ -19,6 +19,7 @@ dependencies = [
 dev = [
     "pytest>=9.1.1",
     "pytest-asyncio>=1.0.0",
+    "pytest-cov>=6.0.0",
     "httpx>=0.28.1",
     "ruff>=0.16.8",
     "mypy>=2.3.1",
@@ -66,3 +67,12 @@ filterwarnings = [
     # starlette ships its replacement.
     "ignore:Using `httpx` with `starlette.testclient` is deprecated:starlette.exceptions.StarletteDeprecationWarning",
 ]
+
+[tool.coverage.run]
+source = ["copilot_api"]
+branch = true
+
+[tool.coverage.report]
+# Business logic mostly lives behind integration tests (real Postgres/DynamoDB); the
+# combined unit + integration run is what's measured against the 85% gate, not either alone.
+exclude_lines = ["pragma: no cover", "if __name__ == .__main__.:"]
