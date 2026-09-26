@@ -15,11 +15,16 @@ from copilot_api.services.refunds import (
     OrderNotFound,
     request_refund,
 )
+from tests.integration.factories import unit_of_work
 
 pytestmark = pytest.mark.integration
 
 # `session_factory` comes from tests/integration/conftest.py: bound to the isolated
 # `copilot_test` database, truncated after every test.
+#
+# request_refund() no longer commits/rolls back itself (see deps.get_db_session and
+# DECISIONS.md "Who owns the transaction"), so every call here is wrapped in
+# `unit_of_work`, the same contract get_db_session applies per request.
 
 
 async def _make_seller(session: AsyncSession) -> Seller:
@@ -65,7 +70,8 @@ async def test_request_refund_success(
         await session.commit()
 
     async with session_factory() as session:
-        case = await request_refund(session, seller.id, order.id, "wrong item")
+        async with unit_of_work(session):
+            case = await request_refund(session, seller.id, order.id, "wrong item")
         assert case.order_id == order.id
 
     async with session_factory() as verify:
@@ -88,7 +94,8 @@ async def test_request_refund_not_owned(
 
     async with session_factory() as session:
         with pytest.raises(OrderNotFound):
-            await request_refund(session, other_seller.id, order.id, "not mine")
+            async with unit_of_work(session):
+                await request_refund(session, other_seller.id, order.id, "not mine")
 
 
 async def test_request_refund_ineligible_status(
@@ -101,7 +108,8 @@ async def test_request_refund_ineligible_status(
 
     async with session_factory() as session:
         with pytest.raises(NotEligible):
-            await request_refund(session, seller.id, order.id, "too early")
+            async with unit_of_work(session):
+                await request_refund(session, seller.id, order.id, "too early")
 
 
 async def test_request_refund_outside_window(
@@ -119,7 +127,8 @@ async def test_request_refund_outside_window(
 
     async with session_factory() as session:
         with pytest.raises(NotEligible):
-            await request_refund(session, seller.id, order.id, "too late")
+            async with unit_of_work(session):
+                await request_refund(session, seller.id, order.id, "too late")
 
 
 async def test_request_refund_already_requested(
@@ -132,12 +141,13 @@ async def test_request_refund_already_requested(
         )
         await session.commit()
 
-    async with session_factory() as session:
+    async with session_factory() as session, unit_of_work(session):
         await request_refund(session, seller.id, order.id, "first")
 
     async with session_factory() as session:
         with pytest.raises(AlreadyRequested):
-            await request_refund(session, seller.id, order.id, "second")
+            async with unit_of_work(session):
+                await request_refund(session, seller.id, order.id, "second")
 
 
 async def test_request_refund_rolls_back_on_failure(
@@ -155,7 +165,8 @@ async def test_request_refund_rolls_back_on_failure(
             mock.patch.object(session, "add", side_effect=RuntimeError("boom")),
             pytest.raises(RuntimeError),
         ):
-            await request_refund(session, seller.id, order.id, "boom")
+            async with unit_of_work(session):
+                await request_refund(session, seller.id, order.id, "boom")
 
     async with session_factory() as verify:
         refreshed = await verify.get(Order, order.id)
@@ -175,7 +186,7 @@ async def test_request_refund_concurrent_requests_exactly_one_succeeds(
         await session.commit()
 
     async def attempt() -> SupportCase:
-        async with session_factory() as session:
+        async with session_factory() as session, unit_of_work(session):
             return await request_refund(session, seller.id, order.id, "concurrent")
 
     results = await asyncio.gather(attempt(), attempt(), return_exceptions=True)

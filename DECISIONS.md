@@ -78,6 +78,15 @@ build; don't let it drift from the code.
 - Tradeoff we accept: A slow transaction holding this lock would block other refund attempts on the same order; the transaction here is just one SELECT, one UPDATE, one INSERT, so the risk is low.
 - Revisit if: A single order regularly sees genuine simultaneous refund attempts, or the transaction grows to include something slower (an external API call) while the lock is held.
 
+## Who owns the transaction
+
+- Status: In use
+- What it does: `get_db_session` is the only place that calls `commit()`/`rollback()`. It yields one session per request, commits it once the request finishes without error, and rolls back and re-raises if anything raised, domain error included. Services and route handlers (`request_refund`, `admin_update_case`, ...) just use the session they're given: no `begin()`, no `commit()`, no `rollback()`.
+- Why we chose it: One unit of work per request, not one per function call. A request that touches the database in two places (say, an ownership lookup and a mutation) commits or rolls back both together. It also sidesteps a real bug this surfaced: a service calling `session.begin()` broke the moment it ran after a dependency had already queried the same session, since SQLAlchemy's `AsyncSession` autobegins a transaction on first use and `begin()` raises if one is already open.
+- Rejected alternative: Each service manages its own transaction (what `request_refund` did before this). Works in isolation, breaks the instant two things share a session in one request, exactly what happened here.
+- Tradeoff we accept: A service function is no longer transaction-safe on its own; calling it outside a request (a script, a test) means the caller must commit or roll back explicitly. `unit_of_work` in the test helpers exists for exactly this.
+- Revisit if: A single request needs two independent, separately-committed transactions (partial success semantics) rather than one all-or-nothing unit of work.
+
 ## Cognito
 
 - Status: In use (token verification code); the actual User Pool isn't deployed yet

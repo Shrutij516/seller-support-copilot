@@ -52,6 +52,5 @@ async def admin_update_case(
         raise conflict(f"cannot transition case from {case.status.value} to {body.status.value}")
 
     case.status = body.status
-    await session.commit()
-    await session.refresh(case)
+    await session.flush()
     return SupportCaseResponse.model_validate(case)

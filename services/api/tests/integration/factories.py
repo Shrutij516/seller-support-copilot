@@ -3,11 +3,27 @@ open session from the `session_factory` fixture, inside `session.begin()`.
 """
 
 import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from copilot_api.models import CaseStatus, CaseType, Order, OrderStatus, Seller, SupportCase
+
+
+@asynccontextmanager
+async def unit_of_work(session: AsyncSession) -> AsyncIterator[None]:
+    """Mirrors copilot_api.deps.get_db_session's commit/rollback contract, for tests that
+    call a service function directly instead of going through the API: commits on success,
+    rolls back and re-raises on any exception. Services never do this themselves.
+    """
+    try:
+        yield
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
 
 
 async def create_seller(

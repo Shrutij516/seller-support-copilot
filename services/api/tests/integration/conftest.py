@@ -196,8 +196,15 @@ def api_client(
     )
 
     async def _override_get_db_session() -> AsyncIterator[AsyncSession]:
+        # Same commit/rollback contract as the real get_db_session (see deps.py):
+        # different session factory (the isolated test database), same unit-of-work rule.
         async with session_factory() as session:
-            yield session
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
 
     fastapi_app.dependency_overrides[get_settings] = lambda: test_settings
     fastapi_app.dependency_overrides[get_jwks_cache] = lambda: jwks_cache
