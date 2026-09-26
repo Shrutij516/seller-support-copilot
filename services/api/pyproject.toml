@@ -10,15 +10,20 @@ dependencies = [
     "pydantic-settings>=2.15.0",
     "psycopg[binary]>=3.3.6",
     "boto3>=1.40.0",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "alembic>=1.14.0",
+    "python-ulid>=3.0.0",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
+    "pytest-asyncio>=1.0.0",
     "httpx>=0.28.1",
     "ruff>=0.16.8",
     "mypy>=2.3.1",
     "boto3-stubs[dynamodb]>=1.40.0",
+    "faker>=33.0.0",
 ]
 
 [build-system]
@@ -31,12 +36,18 @@ packages = ["src/copilot_api"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+extend-exclude = ["migrations/versions"]
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "B", "UP", "SIM", "RUF", "ASYNC", "S", "N"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101"]
+# Domain error names (OrderNotFound, NotEligible, AlreadyRequested) read better without the
+# redundant "Error" suffix in call sites like `raise NotEligible(...)`.
+"src/copilot_api/services/refunds.py" = ["N818"]
+# Deterministic synthetic test data, not a security context; a fixed seed is the whole point.
+"src/copilot_api/scripts/seed.py" = ["S311"]
 
 [tool.mypy]
 strict = true
@@ -46,6 +57,7 @@ files = ["src", "tests"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers -m 'not integration'"
+asyncio_mode = "auto"
 markers = [
     "integration: needs real Postgres and DynamoDB Local (run with `pytest -m integration`)",
 ]
