@@ -35,15 +35,15 @@ build; don't let it drift from the code.
 
 - Status: In use (DynamoDB Local for dev)
 - What it does: Stores chat sessions and message history.
-- Why we chose it: The access pattern is simple and key-based (append a message, read a session's history by session ID, no joins), and old sessions can expire via TTL. That fits key-value better than relational tables.
+- Why we chose it: The access pattern is simple and key-based (append a message, read a session's history by session ID, no joins), and old sessions can expire via TTL. That fits key-value better than relational tables. Honest note: at demo scale, Postgres would also work fine here; the choice is about matching the access pattern and isolating chat growth from the transactional database, not raw performance.
 - Rejected alternative: Postgres tables for chat history. Works, but couples an append-only, high-churn workload to the same database handling transactional seller/order data.
-- Tradeoff we accept: No cross-store transactions with Postgres. Any workflow touching both stores needs eventual consistency, and access patterns must be designed up front since DynamoDB has no ad hoc queries.
+- Tradeoff we accept: No cross-store transactions with Postgres. Access patterns must be designed up front since DynamoDB has no ad hoc queries, and now there are two datastores to operate instead of one.
 - Revisit if: We need to join chat data with relational data in one transaction, or query needs outgrow key-based access.
 
 ## Cognito
 
-- Status: Planned (phase 1)
-- What it does: Handles seller/admin signup and login, issues tokens carrying the role.
+- Status: Planned (phase 2)
+- What it does: Handles seller/admin authentication and issues JWTs with a `cognito:groups` claim (seller or admin). Authorization, what each role can actually do, is enforced in our API code, not by Cognito.
 - Why we chose it: Managed auth with native AWS integration; I don't build or store passwords myself.
 - Rejected alternative: Custom auth (JWT plus a users table). More code to secure and maintain for something Cognito already does.
 - Tradeoff we accept: Less UI and token customization than rolling it myself; some config lives outside app code.
@@ -51,20 +51,29 @@ build; don't let it drift from the code.
 
 ## Bedrock (Knowledge Bases, Guardrails, tool calling, structured outputs)
 
-- Status: Planned (phase 1+)
+- Status: Planned (phase 4)
 - What it does: Knowledge Bases retrieve from ingested policy docs; Guardrails filter unsafe input/output; tool calling lets the model query seller/order data; structured outputs give the API typed, validated responses.
 - Why we chose it: Managed retrieval and safety instead of a hand-built RAG pipeline and moderation layer.
-- Rejected alternative: Self-hosted RAG (own vector DB, prompt-based guardrails). More to build and secure, no managed safety filtering.
-- Tradeoff we accept: Vendor lock-in to Bedrock's APIs and models; less control over retrieval internals.
+- Rejected alternative: Self-hosted RAG with vLLM. I've built this before and know the ops cost firsthand: serving infra, a vector DB, and hand-rolled safety filtering, all first-party maintenance burden.
+- Tradeoff we accept: Vendor lock-in to Bedrock's APIs and models; Guardrails add latency and per-call cost on top of the base model call.
 - Revisit if: Retrieval quality or cost doesn't hold up under real evals.
+
+## Eval harness
+
+- Status: Planned (phase 5)
+- What it does: Runs a golden question set, each with expected facts pulled from our own policy docs, against the assistant's answers on demand, and gates CI on regression.
+- Why we chose it: LLM output changes silently when prompts, models, or the underlying docs change; without automated checks, a regression looks like nothing happened until a seller hits it.
+- Rejected alternative: Manual spot checks. Doesn't scale, easy to skip under deadline pressure, and doesn't run in CI.
+- Tradeoff we accept: Building and maintaining the golden set is its own ongoing work, and it only catches regressions the question set actually covers.
+- Revisit if: The golden set stops catching real regressions, or maintaining it costs more than it saves.
 
 ## OpenTelemetry + CloudWatch/X-Ray
 
-- Status: Planned (phase 1+)
-- What it does: OpenTelemetry instruments the API for traces, metrics, and logs; CloudWatch stores them; X-Ray visualizes traces end to end.
-- Why we chose it: Vendor-neutral instrumentation with native AWS backends, so nothing extra to run.
+- Status: Planned (phase 6)
+- What it does: OpenTelemetry instruments the API for traces, metrics, and logs. In ECS, an ADOT (AWS Distro for OpenTelemetry) collector runs as a sidecar container, forwarding traces to X-Ray and metrics/logs to CloudWatch.
+- Why we chose it: Vendor-neutral instrumentation with native AWS backends, so the app code isn't tied to a specific vendor's SDK.
 - Rejected alternative: A third-party observability vendor (Datadog, Honeycomb). Nicer UX in places, but another paid service to integrate.
-- Tradeoff we accept: X-Ray's tracing UI is less polished than dedicated vendors.
+- Tradeoff we accept: One extra container, the ADOT sidecar, to configure and run per task; X-Ray's tracing UI is less polished than dedicated vendors.
 - Revisit if: Cross-service debugging gets painful enough to justify a dedicated vendor.
 
 ## Docker
@@ -87,16 +96,16 @@ build; don't let it drift from the code.
 
 ## ECS Fargate
 
-- Status: Planned (phase 2+, deploy)
+- Status: Planned (phase 8)
 - What it does: Runs the FastAPI container in production without managing servers.
-- Why we chose it: Serverless containers, scales to near-zero when idle, same Docker image as local dev.
-- Rejected alternative: Lambda. Cheaper at very low volume, but cold starts and a 15-minute limit fit a long-lived API poorly.
-- Tradeoff we accept: Costs more per request than Lambda at very low traffic; more setup (task definitions, ALB).
-- Revisit if: Traffic is low and spiky enough that Lambda's pay-per-invocation wins on cost.
+- Why we chose it: Serverless containers, no EC2 fleet to patch, same Docker image as local dev.
+- Rejected alternative: Lambda. Postgres connection churn per Lambda instance would need RDS Proxy; cold starts are worse with heavy Python deps (boto3, OpenTelemetry); one container gives cleaner dev/prod parity.
+- Tradeoff we accept: Fargate bills per running task-hour even when idle, so this is always-on cost for at least one task plus the ALB. We deploy only for demos, not continuously.
+- Revisit if: Postgres access moves fully behind a proxy layer and cold starts are solved (for example provisioned concurrency), making Lambda viable.
 
 ## pytest + Playwright
 
-- Status: In use (pytest); Planned (Playwright, phase 1+)
+- Status: In use (pytest); Planned (Playwright, phase 7)
 - What it does: pytest covers the API (unit and integration). Playwright will drive the web app in a real browser for end-to-end checks.
 - Why we chose it: pytest is the Python standard; Playwright has good modern ergonomics and CI support.
 - Rejected alternative: Selenium for e2e. Playwright is less flaky in CI with a nicer API.
@@ -117,5 +126,5 @@ build; don't let it drift from the code.
 - **Redis**: Cut. No measured latency problem to justify a cache. Add back only if profiling shows a real hot path.
 - **SQS**: Stretch. Needed for async policy-document ingestion into the Bedrock Knowledge Base; ingestion runs synchronously until the core product works.
 - **CDK**: Stretch. `infra/` stays in the repo (currently just `BudgetStack`) but new infra is deployed by hand until CDK earns its place; its CI job keeps running so it doesn't rot.
-- **Lambda**: Not needed. ECS Fargate fits a long-lived API better; nothing here is a short, bursty, event-triggered job.
-- **Spring Boot**: Rejected. Strongest expertise on paper, but the Java behind it is coursework-only and shallow; FastAPI is the more defensible choice for this timeline.
+- **Lambda**: Not needed in core. Natural fit for the stretch SQS ingestion worker (bursty, event-triggered).
+- **Spring Boot**: Rejected. Common at Amazon, but my Java is coursework-only; FastAPI is the choice I can defend in depth.
