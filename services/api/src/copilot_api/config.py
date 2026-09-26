@@ -17,6 +17,12 @@ class Settings(BaseSettings):
     # Comma-separated list of browser origins allowed to call the API.
     cors_allow_origins: str = "http://localhost:3000"
 
+    # Auth (phase 2). No defaults: a real issuer/client id must be configured before the API
+    # can verify anything. Tests override all three with a locally generated key and fake JWKS.
+    cognito_issuer: str = ""
+    cognito_jwks_url: str = ""
+    cognito_app_client_id: str = ""
+
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.cors_allow_origins.split(",") if o.strip()]

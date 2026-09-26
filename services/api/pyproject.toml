@@ -13,6 +13,7 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0.36",
     "alembic>=1.14.0",
     "python-ulid>=3.0.0",
+    "pyjwt[crypto]>=2.10.0",
 ]
 
 [dependency-groups]
@@ -43,10 +44,16 @@ extend-exclude = ["migrations/versions"]
 select = ["E", "W", "F", "I", "B", "UP", "SIM", "RUF", "ASYNC", "S", "N"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101"]
+# S101: assert is the point of a test. S106/S107: minted-JWT claim values like
+# token_use="id" look like hardcoded passwords to bandit but aren't secrets.
+"tests/**" = ["S101", "S106", "S107"]
 # Domain error names (OrderNotFound, NotEligible, AlreadyRequested) read better without the
 # redundant "Error" suffix in call sites like `raise NotEligible(...)`.
 "src/copilot_api/services/refunds.py" = ["N818"]
+# FastAPI's own recommended pattern is Depends(...)/Query(...) as a parameter default;
+# B008 exists for mutable-default bugs in general Python, not this.
+"src/copilot_api/routers/**" = ["B008"]
+"src/copilot_api/auth.py" = ["B008"]
 # Deterministic synthetic test data, not a security context; a fixed seed is the whole point.
 "src/copilot_api/scripts/seed.py" = ["S311"]
 
