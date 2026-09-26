@@ -35,13 +35,19 @@ class NotEligible(RefundError):
 async def request_refund(
     session: AsyncSession, seller_id: uuid.UUID, order_id: uuid.UUID, reason: str
 ) -> SupportCase:
-    """Move an order to refund_requested and open a case for it, in one transaction.
+    """Move an order to refund_requested and open a case for it, atomically.
 
     Locks the order row (SELECT ... FOR UPDATE) so two concurrent requests for the same
     order serialize: the second sees the first's committed status change and is rejected,
     instead of both racing to insert a case.
+
+    Doesn't assume it owns the session's transaction boundary: a session handed in mid
+    request may already have autobegun one (e.g. from an earlier ownership lookup), and
+    `session.begin()` raises if a transaction is already open. So this commits explicitly
+    on success and rolls back explicitly on any failure, rather than using `session.begin()`
+    as a context manager.
     """
-    async with session.begin():
+    try:
         order = (
             await session.execute(select(Order).where(Order.id == order_id).with_for_update())
         ).scalar_one_or_none()
@@ -74,5 +80,9 @@ async def request_refund(
         )
         session.add(case)
         await session.flush()
+    except Exception:
+        await session.rollback()
+        raise
 
+    await session.commit()
     return case

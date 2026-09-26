@@ -106,6 +106,32 @@ class ChatRepository:
             last_message_at=now,
         )
 
+    async def get_session(self, session_id: str) -> ChatSession | None:
+        """Used for ownership checks: None both when the session never existed and when
+        it's past its expires_at (treated as already gone, consistent with the read filters
+        below, even if the TTL sweep hasn't physically deleted it yet).
+        """
+
+        def _get() -> Any:
+            return self._client.get_item(
+                TableName=self._table_name,
+                Key={"PK": {"S": _session_pk(session_id)}, "SK": {"S": "META"}},
+            )
+
+        response = await asyncio.to_thread(_get)
+        item = response.get("Item")
+        if item is None:
+            return None
+        if int(item["expires_at"]["N"]) <= int(datetime.now(UTC).timestamp()):
+            return None
+        return ChatSession(
+            session_id=session_id,
+            seller_id=item["seller_id"]["S"],
+            title=item["title"]["S"],
+            created_at=datetime.fromisoformat(item["created_at"]["S"]),
+            last_message_at=datetime.fromisoformat(item["last_message_at"]["S"]),
+        )
+
     async def append_message(self, session_id: str, role: str, content: str) -> ChatMessage:
         message_id = str(ULID())
         now = datetime.now(UTC)
