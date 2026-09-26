@@ -66,7 +66,9 @@ def _decode_cursor(cursor: str) -> dict[str, Any]:
 
 class ChatRepository:
     """Access patterns 1-4 below; pattern 5 (expire old sessions) needs no method: DynamoDB's
-    TTL sweep deletes items past their `expires_at`, refreshed on every message append.
+    TTL sweep deletes items past their `expires_at`, refreshed (sliding, 30 days from last
+    activity) on every message append. TTL deletion is lazy, sometimes by hours, so reads
+    also filter out anything already past its `expires_at` that the sweep hasn't caught yet.
     """
 
     def __init__(self, client: DynamoDBClient, table_name: str = TABLE_NAME) -> None:
@@ -161,12 +163,18 @@ class ChatRepository:
         self, session_id: str, limit: int = 50, cursor: str | None = None
     ) -> Page[ChatMessage]:
         pk = _session_pk(session_id)
+        now_epoch = str(int(datetime.now(UTC).timestamp()))
 
         def _query() -> Any:
             kwargs: dict[str, Any] = {
                 "TableName": self._table_name,
                 "KeyConditionExpression": "PK = :pk AND begins_with(SK, :prefix)",
-                "ExpressionAttributeValues": {":pk": {"S": pk}, ":prefix": {"S": "MSG#"}},
+                "FilterExpression": "expires_at > :now",
+                "ExpressionAttributeValues": {
+                    ":pk": {"S": pk},
+                    ":prefix": {"S": "MSG#"},
+                    ":now": {"N": now_epoch},
+                },
                 "Limit": limit,
                 "ScanIndexForward": True,
             }
@@ -191,12 +199,18 @@ class ChatRepository:
     async def list_sessions_for_seller(
         self, seller_id: str, limit: int = 20, cursor: str | None = None
     ) -> Page[ChatSession]:
+        now_epoch = str(int(datetime.now(UTC).timestamp()))
+
         def _query() -> Any:
             kwargs: dict[str, Any] = {
                 "TableName": self._table_name,
                 "IndexName": "GSI1",
                 "KeyConditionExpression": "GSI1PK = :gsi1pk",
-                "ExpressionAttributeValues": {":gsi1pk": {"S": _seller_gsi1pk(seller_id)}},
+                "FilterExpression": "expires_at > :now",
+                "ExpressionAttributeValues": {
+                    ":gsi1pk": {"S": _seller_gsi1pk(seller_id)},
+                    ":now": {"N": now_epoch},
+                },
                 "Limit": limit,
                 "ScanIndexForward": False,
             }
