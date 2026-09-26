@@ -46,6 +46,35 @@ async def test_me_with_valid_token_returns_seller_profile(
     assert body["roles"] == ["seller"]
 
 
+async def test_me_admin_returns_200_with_null_seller(
+    api_client: TestClient, rsa_keypair: RSAPrivateKey
+) -> None:
+    # No sellers row at all for this sub: an admin isn't necessarily also a seller.
+    token = mint_token(rsa_keypair, sub="sub-admin-no-seller-row", groups=["admin"])
+
+    response = api_client.get("/v1/me", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["roles"] == ["admin"]
+    assert body["seller_id"] is None
+    assert body["email"] is None
+    assert body["display_name"] is None
+
+
+async def test_me_seller_not_provisioned_is_403(
+    api_client: TestClient, rsa_keypair: RSAPrivateKey
+) -> None:
+    # cognito:groups says "seller", but no sellers row has this sub yet.
+    token = mint_token(rsa_keypair, sub="sub-seller-not-provisioned", groups=["seller"])
+
+    response = api_client.get("/v1/me", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 403
+    assert response.headers["content-type"] == "application/problem+json"
+    assert response.json()["detail"] == "account not provisioned"
+
+
 async def test_no_token_is_401(api_client: TestClient) -> None:
     response = api_client.get("/v1/me")
     assert response.status_code == 401

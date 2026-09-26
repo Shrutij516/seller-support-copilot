@@ -25,9 +25,10 @@ class ResponseModel(BaseModel):
 
 
 class MeResponse(ResponseModel):
-    seller_id: uuid.UUID
-    email: str
-    display_name: str
+    # null for a principal with no linked sellers row (an admin who isn't also a seller).
+    seller_id: uuid.UUID | None
+    email: str | None
+    display_name: str | None
     roles: list[str]
 
 
