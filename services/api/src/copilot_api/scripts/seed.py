@@ -11,10 +11,21 @@ from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 
 from faker import Faker
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from copilot_api.config import get_settings
 from copilot_api.db import create_engine, create_session_factory
-from copilot_api.models import Listing, ListingStatus, Order, OrderItem, OrderStatus, Seller
+from copilot_api.models import (
+    CaseStatus,
+    CaseType,
+    Listing,
+    ListingStatus,
+    Order,
+    OrderItem,
+    OrderStatus,
+    Seller,
+    SupportCase,
+)
 from copilot_api.services.refunds import REFUND_WINDOW_DAYS
 
 SEED = 1234
@@ -32,6 +43,11 @@ ORDER_STATUS_WEIGHTS: dict[OrderStatus, int] = {
     OrderStatus.REFUNDED: 12,
 }
 DELIVERED_STATUSES = (OrderStatus.DELIVERED, OrderStatus.REFUND_REQUESTED, OrderStatus.REFUNDED)
+# status -> the support_case status a seeded order in that status implies.
+CASE_STATUS_FOR_ORDER_STATUS: dict[OrderStatus, CaseStatus] = {
+    OrderStatus.REFUND_REQUESTED: CaseStatus.OPEN,
+    OrderStatus.REFUNDED: CaseStatus.RESOLVED,
+}
 
 
 def _make_sellers(fake: Faker, rng: random.Random) -> list[Seller]:
@@ -122,41 +138,75 @@ def _make_orders_and_items(
     return orders, items
 
 
-async def seed() -> dict[str, int]:
-    settings = get_settings()
-    if settings.app_env == "prod":
-        print("Refusing to seed: APP_ENV=prod", file=sys.stderr)
-        raise SystemExit(1)
+def _make_support_cases(fake: Faker, orders: list[Order]) -> list[SupportCase]:
+    """One support_case per refund_requested/refunded order, so the seeded data satisfies
+    the same invariant the app maintains: refund_requested -> exactly one open refund_request
+    case; refunded -> exactly one resolved one.
+    """
+    cases = []
+    for order in orders:
+        case_status = CASE_STATUS_FOR_ORDER_STATUS.get(order.status)
+        if case_status is None:
+            continue
+        cases.append(
+            SupportCase(
+                seller_id=order.seller_id,
+                order_id=order.id,
+                type=CaseType.REFUND_REQUEST,
+                status=case_status,
+                description=fake.sentence(),
+            )
+        )
+    return cases
 
+
+async def seed_data(session: AsyncSession) -> dict[str, int]:
+    """The actual data generation, given an open session. Testable independent of settings,
+    engine creation, or the APP_ENV guard.
+    """
     Faker.seed(SEED)
     fake = Faker()
     rng = random.Random(SEED)
 
-    engine = create_engine(settings)
-    session_factory = create_session_factory(engine)
-    try:
-        async with session_factory() as session, session.begin():
-            sellers = _make_sellers(fake, rng)
-            session.add_all(sellers)
-            await session.flush()
+    sellers = _make_sellers(fake, rng)
+    session.add_all(sellers)
+    await session.flush()
 
-            listings = _make_listings(fake, rng, sellers)
-            session.add_all(listings)
-            await session.flush()
+    listings = _make_listings(fake, rng, sellers)
+    session.add_all(listings)
+    await session.flush()
 
-            orders, items = _make_orders_and_items(fake, rng, sellers, listings)
-            session.add_all(orders)
-            session.add_all(items)
-            await session.flush()
-    finally:
-        await engine.dispose()
+    orders, items = _make_orders_and_items(fake, rng, sellers, listings)
+    session.add_all(orders)
+    session.add_all(items)
+    await session.flush()
+
+    cases = _make_support_cases(fake, orders)
+    session.add_all(cases)
+    await session.flush()
 
     return {
         "sellers": len(sellers),
         "listings": len(listings),
         "orders": len(orders),
         "order_items": len(items),
+        "support_cases": len(cases),
     }
+
+
+async def seed() -> dict[str, int]:
+    settings = get_settings()
+    if settings.app_env == "prod":
+        print("Refusing to seed: APP_ENV=prod", file=sys.stderr)
+        raise SystemExit(1)
+
+    engine = create_engine(settings)
+    session_factory = create_session_factory(engine)
+    try:
+        async with session_factory() as session, session.begin():
+            return await seed_data(session)
+    finally:
+        await engine.dispose()
 
 
 def main() -> None:
