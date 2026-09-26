@@ -40,7 +40,7 @@ async def request_refund(
     Locks the order row (SELECT ... FOR UPDATE) so two concurrent requests for the same
     order serialize: the second sees the first's status change and is rejected, instead of
     both racing to insert a case. Uses the session it's given as-is: doesn't begin, commit,
-    or roll back. That's the caller's job (see `get_db_session`) — one unit of work per
+    or roll back. That's the caller's job (see `get_db_session`): one unit of work per
     request, not one per service call, so a request that does several things commits or
     rolls back all of them together.
     """
