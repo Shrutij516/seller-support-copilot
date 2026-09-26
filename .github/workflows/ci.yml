@@ -59,6 +59,13 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run mypy
+      - name: Migrations are reversible (upgrade / downgrade / upgrade)
+        run: |
+          uv run alembic upgrade head
+          uv run alembic downgrade base
+          uv run alembic upgrade head
+      - name: Create DynamoDB "chat" table
+        run: uv run python -m copilot_api.scripts.dynamodb_init
       - name: Unit tests
         run: uv run pytest
       - name: Integration tests
