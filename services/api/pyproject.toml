@@ -49,3 +49,8 @@ addopts = "-ra --strict-markers -m 'not integration'"
 markers = [
     "integration: needs real Postgres and DynamoDB Local (run with `pytest -m integration`)",
 ]
+filterwarnings = [
+    # starlette.testclient still requires httpx and warns once on import; not actionable until
+    # starlette ships its replacement.
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated:starlette.exceptions.StarletteDeprecationWarning",
+]
