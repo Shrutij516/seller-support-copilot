@@ -1,5 +1,9 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { AuthProvider } from "@/lib/auth/AuthProvider";
+import { QueryProvider } from "@/lib/query/QueryProvider";
+import { NavShell } from "@/components/NavShell";
+import { buildContentSecurityPolicy } from "./csp";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -10,7 +14,16 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <head>
+        <meta httpEquiv="Content-Security-Policy" content={buildContentSecurityPolicy()} />
+      </head>
+      <body>
+        <AuthProvider>
+          <QueryProvider>
+            <NavShell>{children}</NavShell>
+          </QueryProvider>
+        </AuthProvider>
+      </body>
     </html>
   );
 }
