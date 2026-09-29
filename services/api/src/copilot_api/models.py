@@ -101,6 +101,10 @@ class Order(Base):
     __tablename__ = "orders"
     __table_args__ = (
         CheckConstraint("total_cents >= 0", name="ck_orders_total_cents_nonneg"),
+        CheckConstraint(
+            "delivered_at IS NULL OR delivered_at >= placed_at",
+            name="ck_orders_delivered_at_after_placed_at",
+        ),
         Index("ix_orders_seller_id_placed_at", "seller_id", text("placed_at DESC")),
         Index("ix_orders_seller_id_status", "seller_id", "status"),
     )

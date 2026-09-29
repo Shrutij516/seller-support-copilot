@@ -5,11 +5,21 @@ open session from the `session_factory` fixture, inside `session.begin()`.
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from copilot_api.models import CaseStatus, CaseType, Order, OrderStatus, Seller, SupportCase
+from copilot_api.models import (
+    CaseStatus,
+    CaseType,
+    Listing,
+    ListingStatus,
+    Order,
+    OrderItem,
+    OrderStatus,
+    Seller,
+    SupportCase,
+)
 
 
 @asynccontextmanager
@@ -47,6 +57,12 @@ async def create_order(
     delivered_at: datetime | None = None,
     placed_at: datetime | None = None,
 ) -> Order:
+    if placed_at is None:
+        # Default placed_at relative to delivered_at (when given), not to "now": the two
+        # must satisfy placed_at <= delivered_at (ck_orders_delivered_at_after_placed_at).
+        placed_at = (
+            delivered_at - timedelta(days=1) if delivered_at is not None else datetime.now(UTC)
+        )
     order = Order(
         id=uuid.uuid4(),
         seller_id=seller_id,
@@ -54,12 +70,52 @@ async def create_order(
         status=status,
         total_cents=1000,
         currency="USD",
-        placed_at=placed_at or datetime.now(UTC),
+        placed_at=placed_at,
         delivered_at=delivered_at,
     )
     session.add(order)
     await session.flush()
     return order
+
+
+async def create_listing(
+    session: AsyncSession,
+    seller_id: uuid.UUID,
+    *,
+    title: str = "Test Listing",
+    sku: str | None = None,
+    price_cents: int = 1000,
+    status: ListingStatus = ListingStatus.ACTIVE,
+) -> Listing:
+    listing = Listing(
+        seller_id=seller_id,
+        sku=sku or f"SKU-{uuid.uuid4().hex[:8].upper()}",
+        title=title,
+        price_cents=price_cents,
+        status=status,
+    )
+    session.add(listing)
+    await session.flush()
+    return listing
+
+
+async def create_order_item(
+    session: AsyncSession,
+    order_id: uuid.UUID,
+    listing_id: uuid.UUID,
+    *,
+    quantity: int = 1,
+    unit_price_cents: int = 1000,
+) -> OrderItem:
+    item = OrderItem(
+        order_id=order_id,
+        listing_id=listing_id,
+        quantity=quantity,
+        unit_price_cents=unit_price_cents,
+    )
+    session.add(item)
+    await session.flush()
+    return item
 
 
 async def create_case(

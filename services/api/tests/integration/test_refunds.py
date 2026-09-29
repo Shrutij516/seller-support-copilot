@@ -37,13 +37,21 @@ async def _make_seller(session: AsyncSession) -> Seller:
 async def _make_order(
     session: AsyncSession, seller: Seller, status: OrderStatus, delivered_at: datetime | None
 ) -> Order:
+    # placed_at must stay <= delivered_at (ck_orders_delivered_at_after_placed_at): derive it
+    # from delivered_at when there is one, instead of a fixed "5 days ago" that can land after
+    # a delivered_at chosen further in the past (e.g. the outside-the-window test case).
+    placed_at = (
+        delivered_at - timedelta(days=1)
+        if delivered_at is not None
+        else datetime.now(UTC) - timedelta(days=5)
+    )
     order = Order(
         seller_id=seller.id,
         buyer_ref="buyer-1",
         status=status,
         total_cents=1000,
         currency="USD",
-        placed_at=datetime.now(UTC) - timedelta(days=5),
+        placed_at=placed_at,
         delivered_at=delivered_at,
     )
     session.add(order)
@@ -107,9 +115,31 @@ async def test_request_refund_ineligible_status(
         await session.commit()
 
     async with session_factory() as session:
-        with pytest.raises(NotEligible):
+        with pytest.raises(NotEligible) as exc_info:
             async with unit_of_work(session):
                 await request_refund(session, seller.id, order.id, "too early")
+        # Sentence case, friendly, no raw enum values leaked (this is shown to the seller
+        # verbatim: see errors.unprocessable).
+        assert exc_info.value.reason == (
+            "This order hasn't been delivered yet, so it isn't eligible for a refund."
+        )
+
+
+async def test_request_refund_ineligible_status_cancelled(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with session_factory() as session:
+        seller = await _make_seller(session)
+        order = await _make_order(session, seller, OrderStatus.CANCELLED, None)
+        await session.commit()
+
+    async with session_factory() as session:
+        with pytest.raises(NotEligible) as exc_info:
+            async with unit_of_work(session):
+                await request_refund(session, seller.id, order.id, "cancelled order")
+        assert exc_info.value.reason == (
+            "This order was cancelled, so it isn't eligible for a refund."
+        )
 
 
 async def test_request_refund_outside_window(
@@ -126,9 +156,12 @@ async def test_request_refund_outside_window(
         await session.commit()
 
     async with session_factory() as session:
-        with pytest.raises(NotEligible):
+        with pytest.raises(NotEligible) as exc_info:
             async with unit_of_work(session):
                 await request_refund(session, seller.id, order.id, "too late")
+        assert exc_info.value.reason == (
+            "This order was delivered more than 30 days ago, so it's outside the refund window."
+        )
 
 
 async def test_request_refund_already_requested(
