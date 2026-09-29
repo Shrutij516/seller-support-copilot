@@ -79,25 +79,33 @@ jobs:
 
   web:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/web
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
         with:
-          package_json_file: apps/web/package.json
+          package_json_file: package.json
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: pnpm
-          cache-dependency-path: apps/web/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - run: pnpm lint
-      - run: pnpm typecheck
-      - run: pnpm build
+      - name: Generated API client is up to date
+        run: |
+          pnpm --filter @copilot/api-client run generate
+          git diff --exit-code -- packages/api-client/src/generated.ts
+      - run: pnpm --filter @copilot/api-client run typecheck
+      - run: pnpm --filter @copilot/web run lint
+      - run: pnpm --filter @copilot/web run typecheck
+      - run: pnpm --filter @copilot/web run build
         env:
           NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+          NEXT_PUBLIC_COGNITO_AUTHORITY: https://cognito-idp.us-east-1.amazonaws.com/us-east-1_ciexample
+          NEXT_PUBLIC_COGNITO_CLIENT_ID: ci-placeholder-client-id
+          NEXT_PUBLIC_COGNITO_DOMAIN: https://ci-placeholder.auth.us-east-1.amazoncognito.com
+          NEXT_PUBLIC_COGNITO_REDIRECT_URI: http://localhost:3000/auth/callback
+          NEXT_PUBLIC_COGNITO_LOGOUT_URI: http://localhost:3000
+          NEXT_PUBLIC_COGNITO_SCOPE: "openid email"
 
   api-image:
     runs-on: ubuntu-latest
