@@ -1,3 +1,7 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
 # Dependency install scripts are denied unless listed as true.
 allowBuilds:
   # Only a fallback for platforms without a prebuilt native binary.

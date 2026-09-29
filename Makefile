@@ -1,10 +1,11 @@
 API_DIR := services/api
 WEB_DIR := apps/web
 INFRA_DIR := infra
-# Uses the pnpm version pinned in apps/web/package.json via corepack (ships with Node 24).
+CLIENT_DIR := packages/api-client
+# Uses the pnpm version pinned in package.json via corepack (ships with Node 24).
 PNPM ?= corepack pnpm
 
-.PHONY: up down test test-integration lint typecheck migrate dynamodb-init seed coverage openapi openapi-check link-user
+.PHONY: up down test test-integration lint typecheck migrate dynamodb-init seed coverage openapi openapi-check link-user api-client api-client-check
 
 up: ## Start Postgres, DynamoDB Local, and the API; wait until healthy
 	docker compose up -d --build --wait
@@ -53,11 +54,19 @@ openapi-check: ## Fail if openapi.json is out of date with the code (used by CI)
 		uv run python -m copilot_api.scripts.export_openapi
 	git diff --exit-code -- $(API_DIR)/openapi.json
 
+api-client: ## Regenerate the TypeScript client from services/api/openapi.json
+	$(PNPM) --filter @copilot/api-client run generate
+
+api-client-check: ## Fail if the generated client is stale (used by CI)
+	$(PNPM) --filter @copilot/api-client run generate
+	git diff --exit-code -- $(CLIENT_DIR)/src/generated.ts
+
 lint:
 	cd $(API_DIR) && uv run ruff check . && uv run ruff format --check .
 	cd $(WEB_DIR) && $(PNPM) lint
 
 typecheck:
 	cd $(API_DIR) && uv run mypy
+	$(PNPM) --filter @copilot/api-client run typecheck
 	cd $(WEB_DIR) && $(PNPM) typecheck
 	cd $(INFRA_DIR) && npm run build
