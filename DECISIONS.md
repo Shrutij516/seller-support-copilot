@@ -204,6 +204,62 @@ build; don't let it drift from the code.
 - Tradeoff we accept: One CI pipeline runs longer as services are added; will need path filters eventually.
 - Revisit if: Multiple people start owning different services independently.
 
+## oidc-client-ts (not Amplify)
+
+- Status: In use
+- What it does: Drives Cognito's hosted login with Authorization Code + PKCE: builds the authorize URL, exchanges the code, and stores the resulting tokens.
+- Why we chose it: A standard, framework-agnostic OIDC client that talks to Cognito's managed login over plain OIDC discovery. It does exactly one job (the token dance), so the auth code stays small and auditable.
+- Rejected alternative: AWS Amplify. Handles the same flow plus a lot more (Amplify UI components, Amplify's own client wrappers for other AWS services), none of which this app needs; it would also mean learning and depending on Amplify's own auth object model instead of plain OIDC concepts that transfer elsewhere.
+- Tradeoff we accept: A few things Amplify gives for free (built-in React hooks, prebuilt login UI) are hand-rolled here instead (`AuthProvider`, `useAuth`, the sign-in/sign-out buttons in `NavShell`).
+- Revisit if: The app needs other Amplify-managed AWS services (Storage, another Cognito-adjacent feature) where a single unified client would actually save real code.
+
+## sessionStorage for tokens (not memory, not cookies)
+
+- Status: In use
+- What it does: `oidc-client-ts`'s `WebStorageStateStore` persists the access and ID tokens to `sessionStorage`.
+- Why we chose it: Survives a page reload (an in-memory-only store would force a fresh login on every refresh, which is a bad experience for a page the user reloads often) but clears when the tab closes, unlike `localStorage`, which would leave tokens sitting around indefinitely.
+- Rejected alternative 1: In-memory only (a module-level variable, no storage API). Best XSS resistance, since nothing durable exists for a script to read, but every page reload would force a full Cognito hosted-login redirect, which is disruptive for a page reloaded as often as this one likely is.
+- Rejected alternative 2: An httpOnly cookie set by a server. Immune to XSS token theft entirely, but this app has no server component (static export to S3/CloudFront); setting an httpOnly cookie needs a backend to set it, which would mean standing up a server whose only job is auth.
+- Tradeoff we accept: `sessionStorage` is readable by any script running on the page, so a successful XSS attack can exfiltrate the access token for that session. The CSP (`<meta http-equiv="Content-Security-Policy">` in `layout.tsx`) is the primary mitigation: it restricts `script-src`/`connect-src` so an injected script has nowhere to load from or send data to. This is a real, accepted risk given the static-export constraint, not an oversight.
+- Revisit if: The app grows a server component (even a thin one) that could set httpOnly cookies, or a stored-XSS vector is found in the app's own rendering that this CSP wouldn't already block.
+
+## TanStack Query
+
+- Status: In use
+- What it does: Owns server-state fetching, caching, and mutation for every API call from the web app (`useMe`, `useOrdersInfinite`, `useCreateRefundRequest`, and the rest of `lib/api/hooks.ts`).
+- Why we chose it: Loading/error/success states, cache invalidation after a mutation, and cursor-based pagination (`useInfiniteQuery`) all come for free instead of hand-written `useState`/`useEffect` fetch logic repeated on every page.
+- Rejected alternative: Plain `useEffect` + `useState` per page. No new dependency, but every page reimplements loading/error/race-condition handling, and a mutation (like submitting a refund) has no built-in way to invalidate and refetch the orders/cases lists it affects.
+- Tradeoff we accept: A cache to reason about (`staleTime`, `queryKey` shape) instead of a fetch being a fetch; stale data can briefly show after a mutation until invalidation completes.
+- Revisit if: Server state gets simple enough, or infrequent enough, that the caching layer stops paying for itself.
+
+## Generated TypeScript client from openapi.json
+
+- Status: In use
+- What it does: `packages/api-client` runs `openapi-typescript` against `services/api/openapi.json` to generate typed `paths`/`components` (`src/generated.ts`, committed), wrapped by a thin `openapi-fetch` client (`src/index.ts`). CI regenerates it and fails the build if the committed file has drifted (`api-client-check` / the "Generated API client is up to date" CI step).
+- Why we chose it: The API's request/response shapes are already fully described by FastAPI's own OpenAPI output; generating types from it means a backend field rename or a new required field is a frontend type error, not a runtime surprise discovered by a seller.
+- Rejected alternative: Hand-written TypeScript interfaces mirroring the API's Pydantic models. No generation step to run, but nothing stops the two from drifting apart silently; a backend change would need to be manually mirrored on the frontend with no compiler catching a miss.
+- Tradeoff we accept: An extra regeneration step in the workflow (`make api-client`) whenever the API's OpenAPI contract changes, and a generated file large enough that it isn't hand-reviewed line by line, only diffed.
+- Revisit if: The OpenAPI output stops being an accurate contract (for example, hand-tweaked responses that bypass the declared Pydantic models).
+
+## Query-param detail routes, not dynamic segments
+
+- Status: In use
+- What it does: `/orders/detail?id=...` and `/cases/detail?id=...` instead of `/orders/[id]`.
+- Why we chose it: `output: "export"` (static export, no server) can't serve a dynamic route unless every possible `id` is enumerated at build time via `generateStaticParams`, which isn't possible here since order and case IDs are created continuously at runtime by seller activity, not known when the site is built.
+- Rejected alternative: Dynamic route segments (`app/orders/[id]/page.tsx`) with `generateStaticParams`. Would need either a fixed, build-time-known ID list (impossible for live data) or `dynamicParams: true` with on-demand rendering, which needs a server and contradicts the static-export decision.
+- Tradeoff we accept: Less idiomatic Next.js routing (no automatic per-ID static pages, no `notFound()` at the routing layer), and `useSearchParams()` requires wrapping each detail page's content in `<Suspense>` even though the app has no real streaming use for it.
+- Revisit if: The static-export decision is revisited (see "Next.js static export" above); a server-rendered deployment would make dynamic segments the more natural choice.
+
+## ResponsiveTable: one data source, two renderings
+
+- Status: In use
+- What it does: `ResponsiveTable` takes one `columns`/`rows` pair and renders both a real `<table>` (shown `md:block`, hidden below `md` via the `hidden` utility) and a card `<ul>` (shown below `md`, hidden at `md:hidden`) from that same data, rather than each page hand-writing a separate mobile layout.
+- Why we chose it: A hand-written mobile view kept in sync by hand with its desktop table is a change every page has to remember to make twice; deriving both from one `columns` array makes that drift structurally impossible; a new column shows up in both renderings automatically.
+- Why `hidden`/`md:hidden` (display:none) and not a visually-hidden (`sr-only`, clip-based) approach: `sr-only` only hides content visually and leaves both copies in the accessibility tree, so a screen reader user would hear every row announced twice (once from the table, once from the card list) even though a sighted user sees only one. `display: none` removes the inactive copy from the accessibility tree entirely, so exactly one rendering is exposed at any given viewport width, for both sighted and screen-reader users.
+- Rejected alternative: Two separate components per page (a `<table>` and a card list, each hand-written). More direct to read for any one page, but doubles the work and the chance for the two to drift, and both add up across the six pages that list something.
+- Tradeoff we accept: Both renderings exist in the DOM at once (only one is visible via CSS), which means slightly more markup shipped than a media-query-free approach, and any interaction handler on the first column (`rowHref`) has to be wired identically in both branches of the component.
+- Revisit if: A page's mobile card layout needs to diverge meaningfully from "first column as title, rest as label/value pairs" (a genuinely different mobile UX, not just a reflow).
+
 ## Cut or deferred
 
 - **Redis**: Cut. No measured latency problem to justify a cache. Add back only if profiling shows a real hot path.
