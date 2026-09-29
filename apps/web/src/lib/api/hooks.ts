@@ -19,7 +19,7 @@ export function useMe() {
   });
 }
 
-export function useOrdersInfinite(status: OrderStatus | undefined) {
+export function useOrdersInfinite(status: OrderStatus | undefined, options?: { enabled?: boolean }) {
   return useInfiniteQuery({
     queryKey: ["orders", status ?? null],
     initialPageParam: undefined as string | undefined,
@@ -31,10 +31,11 @@ export function useOrdersInfinite(status: OrderStatus | undefined) {
       return data;
     },
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
+    enabled: options?.enabled ?? true,
   });
 }
 
-export function useOrder(orderId: string | null) {
+export function useOrder(orderId: string | null, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["order", orderId],
     queryFn: async () => {
@@ -44,7 +45,7 @@ export function useOrder(orderId: string | null) {
       if (error) throw new ApiError(error);
       return data;
     },
-    enabled: Boolean(orderId),
+    enabled: Boolean(orderId) && (options?.enabled ?? true),
   });
 }
 
@@ -67,7 +68,7 @@ export function useCreateRefundRequest(orderId: string) {
   });
 }
 
-export function useCases() {
+export function useCases(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["cases"],
     queryFn: async () => {
@@ -75,10 +76,11 @@ export function useCases() {
       if (error) throw new ApiError(error);
       return data;
     },
+    enabled: options?.enabled ?? true,
   });
 }
 
-export function useCase(caseId: string | null) {
+export function useCase(caseId: string | null, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["case", caseId],
     queryFn: async () => {
@@ -88,11 +90,11 @@ export function useCase(caseId: string | null) {
       if (error) throw new ApiError(error);
       return data;
     },
-    enabled: Boolean(caseId),
+    enabled: Boolean(caseId) && (options?.enabled ?? true),
   });
 }
 
-export function useChatSessions() {
+export function useChatSessions(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["chat-sessions"],
     queryFn: async () => {
@@ -102,6 +104,7 @@ export function useChatSessions() {
       if (error) throw new ApiError(error);
       return data;
     },
+    enabled: options?.enabled ?? true,
   });
 }
 
@@ -119,7 +122,7 @@ export function useCreateChatSession() {
   });
 }
 
-export function useChatMessages(sessionId: string | null) {
+export function useChatMessages(sessionId: string | null, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["chat-messages", sessionId],
     queryFn: async () => {
@@ -129,7 +132,7 @@ export function useChatMessages(sessionId: string | null) {
       if (error) throw new ApiError(error);
       return data;
     },
-    enabled: Boolean(sessionId),
+    enabled: Boolean(sessionId) && (options?.enabled ?? true),
   });
 }
 

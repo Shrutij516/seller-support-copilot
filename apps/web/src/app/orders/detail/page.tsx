@@ -3,8 +3,11 @@
 import { Suspense, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import { PageHeading } from "@/components/PageHeading";
+import { SellerOnlyNotice } from "@/components/SellerOnlyNotice";
+import { useAuth } from "@/lib/auth/AuthProvider";
 import { useCreateRefundRequest, useOrder } from "@/lib/api/hooks";
 import { formatCents, formatDate, formatStatus } from "@/lib/format";
+import { getRefundIneligibilityReason } from "@/lib/refundEligibility";
 
 const REASON_MIN = 10;
 const REASON_MAX = 1000;
@@ -19,13 +22,20 @@ function validateReason(value: string): string | null {
   return null;
 }
 
-export function RefundForm({ orderId }: { orderId: string }) {
+export function RefundForm({
+  orderId,
+  ineligibleReason,
+}: {
+  orderId: string;
+  ineligibleReason: string | null;
+}) {
   const [reason, setReason] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
   const mutation = useCreateRefundRequest(orderId);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
+    if (ineligibleReason) return;
     const err = validateReason(reason);
     setValidationError(err);
     if (err) return;
@@ -45,47 +55,55 @@ export function RefundForm({ orderId }: { orderId: string }) {
 
   return (
     <form onSubmit={handleSubmit} noValidate className="mt-2 max-w-md space-y-3">
-      <div>
-        <label htmlFor="refund-reason" className="block text-sm font-medium">
-          Reason for refund
-        </label>
-        <textarea
-          id="refund-reason"
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          rows={4}
-          minLength={REASON_MIN}
-          maxLength={REASON_MAX}
-          aria-describedby="refund-reason-hint"
-          aria-invalid={Boolean(validationError)}
-          aria-errormessage={validationError ? "refund-reason-error" : undefined}
-          className="mt-1 w-full rounded-md border border-slate-300 p-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-        />
-        <p id="refund-reason-hint" className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-          {reason.length}/{REASON_MAX} characters, minimum {REASON_MIN}
-        </p>
-        {validationError && (
-          <p
-            id="refund-reason-error"
-            role="alert"
-            className="mt-1 text-sm text-red-700 dark:text-red-400"
-          >
-            {validationError}
-          </p>
-        )}
-      </div>
-      {mutation.isError && (
-        <p role="alert" className="text-sm text-red-700 dark:text-red-400">
-          {mutation.error.message}
+      {/* Shown up front, before the (disabled) form, so the seller sees why without having
+          to try submitting first. The server re-checks eligibility on submit regardless. */}
+      {ineligibleReason && (
+        <p role="status" className="text-sm text-slate-600 dark:text-slate-400">
+          {ineligibleReason}
         </p>
       )}
-      <button
-        type="submit"
-        disabled={mutation.isPending}
-        className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-      >
-        {mutation.isPending ? "Submitting..." : "Request refund"}
-      </button>
+      <fieldset disabled={Boolean(ineligibleReason) || mutation.isPending} className="space-y-3">
+        <div>
+          <label htmlFor="refund-reason" className="block text-sm font-medium">
+            Reason for refund
+          </label>
+          <textarea
+            id="refund-reason"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={4}
+            minLength={REASON_MIN}
+            maxLength={REASON_MAX}
+            aria-describedby="refund-reason-hint"
+            aria-invalid={Boolean(validationError)}
+            aria-errormessage={validationError ? "refund-reason-error" : undefined}
+            className="mt-1 w-full rounded-md border border-slate-300 p-2 text-sm disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900"
+          />
+          <p id="refund-reason-hint" className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            {reason.length}/{REASON_MAX} characters, minimum {REASON_MIN}
+          </p>
+          {validationError && (
+            <p
+              id="refund-reason-error"
+              role="alert"
+              className="mt-1 text-sm text-red-700 dark:text-red-400"
+            >
+              {validationError}
+            </p>
+          )}
+        </div>
+        {mutation.isError && (
+          <p role="alert" className="text-sm text-red-700 dark:text-red-400">
+            {mutation.error.message}
+          </p>
+        )}
+        <button
+          type="submit"
+          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          {mutation.isPending ? "Submitting..." : "Request refund"}
+        </button>
+      </fieldset>
     </form>
   );
 }
@@ -93,13 +111,24 @@ export function RefundForm({ orderId }: { orderId: string }) {
 function OrderDetailContent() {
   const searchParams = useSearchParams();
   const orderId = searchParams.get("id");
-  const order = useOrder(orderId);
+  const { roles } = useAuth();
+  const isAdmin = roles.includes("admin");
+  const order = useOrder(orderId, { enabled: !isAdmin });
 
   if (!orderId) {
     return (
       <div>
         <PageHeading>Order not found</PageHeading>
         <p className="mt-2 text-slate-600 dark:text-slate-400">No order id was provided.</p>
+      </div>
+    );
+  }
+
+  if (isAdmin) {
+    return (
+      <div>
+        <PageHeading>Order detail</PageHeading>
+        <SellerOnlyNotice />
       </div>
     );
   }
@@ -148,8 +177,17 @@ function OrderDetailContent() {
                 <h2 className="text-lg font-semibold">Items</h2>
                 <ul className="mt-2 divide-y divide-slate-200 dark:divide-slate-800">
                   {order.data.items.map((item) => (
-                    <li key={item.listing_id} className="flex justify-between py-2 text-sm">
-                      <span>Qty {item.quantity}</span>
+                    <li
+                      key={item.listing_id}
+                      className="flex items-center justify-between gap-3 py-2 text-sm"
+                    >
+                      <span>
+                        <span className="font-medium">{item.listing_title}</span>{" "}
+                        <span className="text-slate-500 dark:text-slate-400">
+                          (SKU {item.listing_sku})
+                        </span>
+                        <span className="text-slate-500 dark:text-slate-400"> &middot; Qty {item.quantity}</span>
+                      </span>
                       <span>{formatCents(item.unit_price_cents)}</span>
                     </li>
                   ))}
@@ -159,13 +197,10 @@ function OrderDetailContent() {
 
             <div className="mt-6">
               <h2 className="text-lg font-semibold">Request a refund</h2>
-              {order.data.status === "delivered" ? (
-                <RefundForm orderId={order.data.id} />
-              ) : (
-                <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                  Refunds can only be requested for delivered orders.
-                </p>
-              )}
+              <RefundForm
+                orderId={order.data.id}
+                ineligibleReason={getRefundIneligibilityReason(order.data)}
+              />
             </div>
           </>
         )}

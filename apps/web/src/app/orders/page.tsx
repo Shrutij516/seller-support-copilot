@@ -4,7 +4,9 @@ import { useState } from "react";
 import type { components } from "@copilot/api-client";
 import { PageHeading } from "@/components/PageHeading";
 import { ResponsiveTable, type Column } from "@/components/ResponsiveTable";
+import { SellerOnlyNotice } from "@/components/SellerOnlyNotice";
 import { StatusFilter } from "@/components/StatusFilter";
+import { useAuth } from "@/lib/auth/AuthProvider";
 import { useOrdersInfinite } from "@/lib/api/hooks";
 import { formatCents, formatDate, formatStatus } from "@/lib/format";
 
@@ -25,13 +27,25 @@ const columns: Column<Order>[] = [
   { header: "Status", cell: (o) => formatStatus(o.status) },
   { header: "Total", cell: (o) => formatCents(o.total_cents, o.currency) },
   { header: "Placed", cell: (o) => formatDate(o.placed_at) },
+  { header: "Delivered", cell: (o) => (o.delivered_at ? formatDate(o.delivered_at) : "—") },
 ];
 
 export default function OrdersPage() {
   const [status, setStatus] = useState<OrderStatus | "">("");
-  const orders = useOrdersInfinite(status || undefined);
+  const { roles } = useAuth();
+  const isAdmin = roles.includes("admin");
+  const orders = useOrdersInfinite(status || undefined, { enabled: !isAdmin });
 
   const rows = orders.data?.pages.flatMap((page) => page.items) ?? [];
+
+  if (isAdmin) {
+    return (
+      <div>
+        <PageHeading>Orders</PageHeading>
+        <SellerOnlyNotice />
+      </div>
+    );
+  }
 
   return (
     <div>
