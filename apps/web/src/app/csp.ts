@@ -35,8 +35,13 @@ export function buildContentSecurityPolicy(): string {
     "font-src": ["'self'"],
     "connect-src": [...connectSrc],
     "form-action": [...formAction],
-    "frame-ancestors": ["'none'"],
     "base-uri": ["'none'"],
+    // frame-ancestors deliberately omitted: browsers ignore it entirely when a CSP is
+    // delivered via <meta> (there's no way to enforce it without a real HTTP response header,
+    // which a static export has no server to send), and an ignored directive is worse than no
+    // directive since it's silent about not protecting anything. Clickjacking protection for
+    // this site has to come from a CloudFront response-headers policy at the CDN layer
+    // instead; see the "Next.js static export" entry in DECISIONS.md.
   };
 
   return Object.entries(directives)

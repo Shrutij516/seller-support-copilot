@@ -15,7 +15,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <head>
-        <meta httpEquiv="Content-Security-Policy" content={buildContentSecurityPolicy()} />
+        {/* Dev-only skip: next dev's Turbopack HMR client injects its own inline bootstrap
+            scripts that change per session, so they can't be hash-pinned like the static
+            export's build-time-fixed ones (see scripts/inject-csp-hashes.mjs). The policy
+            only needs to hold for what actually gets deployed: the production build. */}
+        {process.env.NODE_ENV === "production" && (
+          <meta httpEquiv="Content-Security-Policy" content={buildContentSecurityPolicy()} />
+        )}
       </head>
       <body>
         <AuthProvider>

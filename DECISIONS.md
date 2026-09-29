@@ -19,8 +19,8 @@ build; don't let it drift from the code.
 - What it does: Builds the web app to static HTML/JS/CSS, served from S3 through CloudFront.
 - Why we chose it: The app is just a client of the API; no SEO or SSR need. Static hosting is near-zero cost with nothing to patch or scale.
 - Rejected alternative: Next.js server on ECS Fargate. Gives SSR, route handlers, image optimization; not needed here, and costs more to run.
-- Tradeoff we accept: No SSR, no `app/api`, no server actions. Each environment needs its own build since env vars are inlined at build time.
-- Revisit if: A page needs SSR for SEO, or we need server-side secrets in the front end.
+- Tradeoff we accept: No SSR, no `app/api`, no server actions. Each environment needs its own build since env vars are inlined at build time. The CSP also has to be a `<meta>` tag baked into each HTML file rather than a real response header, which has two consequences: `frame-ancestors` is silently ignored by browsers when delivered this way, so clickjacking protection isn't in place until a CloudFront response-headers policy adds it at the CDN layer; and `script-src` can't use a per-request nonce (no server to mint one), so Next's own inline hydration scripts are allowed via build-time SHA-256 hashes instead (`apps/web/scripts/inject-csp-hashes.mjs`, run as a `postbuild` step), not `'unsafe-inline'`.
+- Revisit if: A page needs SSR for SEO, or we need server-side secrets in the front end, or the frame-ancestors gap needs closing sooner than the CloudFront setup.
 
 ## Postgres
 
