@@ -1,13 +1,26 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { PageHeading } from "@/components/PageHeading";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useCases, useMe, useOrdersInfinite } from "@/lib/api/hooks";
 import { formatCents, formatStatus } from "@/lib/format";
 
 export default function DashboardPage() {
-  const { user, isLoading: authLoading, signIn } = useAuth();
+  const { user, roles, isLoading: authLoading, signIn } = useAuth();
+  const isAdmin = roles.includes("admin");
+  const router = useRouter();
+
+  // Admins land on /admin/cases, not the seller dashboard: this page's data (orders, cases)
+  // is seller-only and an admin principal can't read it anyway (require_seller rejects a
+  // pure-admin token with 403).
+  useEffect(() => {
+    if (!authLoading && user && isAdmin) {
+      router.replace("/admin/cases");
+    }
+  }, [authLoading, user, isAdmin, router]);
 
   if (authLoading) {
     return <p className="text-slate-600 dark:text-slate-400">Loading...</p>;
@@ -27,6 +40,15 @@ export default function DashboardPage() {
         >
           Sign in
         </button>
+      </div>
+    );
+  }
+
+  if (isAdmin) {
+    return (
+      <div>
+        <PageHeading>Dashboard</PageHeading>
+        <p className="mt-2 text-slate-600 dark:text-slate-400">Redirecting to admin cases...</p>
       </div>
     );
   }

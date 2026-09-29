@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import type { User } from "oidc-client-ts";
 import AdminCasesPage from "./page";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { useAdminCases } from "@/lib/api/hooks";
+import { useAdminCases, useMe } from "@/lib/api/hooks";
 
 vi.mock("@/lib/auth/AuthProvider", () => ({
   useAuth: vi.fn(),
@@ -11,6 +11,7 @@ vi.mock("@/lib/auth/AuthProvider", () => ({
 
 vi.mock("@/lib/api/hooks", () => ({
   useAdminCases: vi.fn(),
+  useMe: vi.fn(),
   useUpdateAdminCase: vi.fn(() => ({
     mutate: vi.fn(),
     isPending: false,
@@ -21,6 +22,7 @@ vi.mock("@/lib/api/hooks", () => ({
 
 const mockedUseAuth = vi.mocked(useAuth);
 const mockedUseAdminCases = vi.mocked(useAdminCases);
+const mockedUseMe = vi.mocked(useMe);
 
 function authState(overrides: Partial<ReturnType<typeof useAuth>>): ReturnType<typeof useAuth> {
   return {
@@ -45,6 +47,14 @@ describe("AdminCasesPage role gate", () => {
       isSuccess: false,
       error: null,
     } as unknown as ReturnType<typeof useAdminCases>);
+    mockedUseMe.mockReset();
+    mockedUseMe.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: false,
+      isSuccess: false,
+      error: null,
+    } as unknown as ReturnType<typeof useMe>);
   });
 
   it("prompts sign-in when there is no user", () => {
@@ -75,5 +85,39 @@ describe("AdminCasesPage role gate", () => {
 
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.getByLabelText(/filter by status/i)).toBeInTheDocument();
+  });
+
+  it("greets an admin with no display name by role, not a blank or null", () => {
+    mockedUseAuth.mockReturnValue(
+      authState({ user: { profile: {} } as User, roles: ["admin"] }),
+    );
+    mockedUseMe.mockReturnValue({
+      data: { seller_id: null, email: null, display_name: null, roles: ["admin"] },
+      isLoading: false,
+      isError: false,
+      isSuccess: true,
+      error: null,
+    } as unknown as ReturnType<typeof useMe>);
+
+    render(<AdminCasesPage />);
+
+    expect(screen.getByText(/welcome back, admin\./i)).toBeInTheDocument();
+  });
+
+  it("greets an admin who is also a seller by their display name", () => {
+    mockedUseAuth.mockReturnValue(
+      authState({ user: { profile: {} } as User, roles: ["admin"] }),
+    );
+    mockedUseMe.mockReturnValue({
+      data: { seller_id: "s-1", email: "a@example.com", display_name: "Acme Corp", roles: ["admin"] },
+      isLoading: false,
+      isError: false,
+      isSuccess: true,
+      error: null,
+    } as unknown as ReturnType<typeof useMe>);
+
+    render(<AdminCasesPage />);
+
+    expect(screen.getByText(/welcome back, acme corp\./i)).toBeInTheDocument();
   });
 });

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth/AuthProvider";
 
-const LINKS = [
+const SELLER_LINKS = [
   { href: "/", label: "Dashboard" },
   { href: "/orders", label: "Orders" },
   { href: "/cases", label: "Cases" },
@@ -45,10 +45,11 @@ export function NavShell({ children }: { children: React.ReactNode }) {
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-3">
           <span className="text-lg font-semibold">Seller Support Copilot</span>
           <nav aria-label="Primary" className="flex flex-wrap items-center gap-1">
-            {LINKS.map((link) => (
-              <NavLink key={link.href} href={link.href} label={link.label} />
-            ))}
-            {isAdmin && <NavLink href="/admin/cases" label="Admin" />}
+            {isAdmin
+              ? <NavLink href="/admin/cases" label="Admin" />
+              : SELLER_LINKS.map((link) => (
+                  <NavLink key={link.href} href={link.href} label={link.label} />
+                ))}
           </nav>
           <div className="flex items-center gap-3">
             {!isLoading && !configError && user && (

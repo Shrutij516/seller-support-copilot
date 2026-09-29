@@ -2,6 +2,8 @@
 
 import { useState, type FormEvent } from "react";
 import { PageHeading } from "@/components/PageHeading";
+import { SellerOnlyNotice } from "@/components/SellerOnlyNotice";
+import { useAuth } from "@/lib/auth/AuthProvider";
 import { useChatMessages, useChatSessions, useCreateChatSession } from "@/lib/api/hooks";
 import { formatDate } from "@/lib/format";
 
@@ -51,12 +53,23 @@ function NewSessionForm({ onCreated }: { onCreated: (sessionId: string) => void 
 }
 
 export default function ChatPage() {
-  const sessions = useChatSessions();
+  const { roles } = useAuth();
+  const isAdmin = roles.includes("admin");
+  const sessions = useChatSessions({ enabled: !isAdmin });
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const messages = useChatMessages(selectedId);
+  const messages = useChatMessages(selectedId, { enabled: !isAdmin });
 
   const sessionList = sessions.data?.items ?? [];
   const activeId = selectedId ?? sessionList[0]?.session_id ?? null;
+
+  if (isAdmin) {
+    return (
+      <div>
+        <PageHeading>Chat</PageHeading>
+        <SellerOnlyNotice />
+      </div>
+    );
+  }
 
   return (
     <div>

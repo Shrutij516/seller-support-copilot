@@ -4,19 +4,32 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { PageHeading } from "@/components/PageHeading";
+import { SellerOnlyNotice } from "@/components/SellerOnlyNotice";
+import { useAuth } from "@/lib/auth/AuthProvider";
 import { useCase } from "@/lib/api/hooks";
 import { formatDate, formatStatus } from "@/lib/format";
 
 function CaseDetailContent() {
   const searchParams = useSearchParams();
   const caseId = searchParams.get("id");
-  const supportCase = useCase(caseId);
+  const { roles } = useAuth();
+  const isAdmin = roles.includes("admin");
+  const supportCase = useCase(caseId, { enabled: !isAdmin });
 
   if (!caseId) {
     return (
       <div>
         <PageHeading>Case not found</PageHeading>
         <p className="mt-2 text-slate-600 dark:text-slate-400">No case id was provided.</p>
+      </div>
+    );
+  }
+
+  if (isAdmin) {
+    return (
+      <div>
+        <PageHeading>Case detail</PageHeading>
+        <SellerOnlyNotice />
       </div>
     );
   }

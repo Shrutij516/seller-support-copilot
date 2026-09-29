@@ -3,6 +3,8 @@
 import type { components } from "@copilot/api-client";
 import { PageHeading } from "@/components/PageHeading";
 import { ResponsiveTable, type Column } from "@/components/ResponsiveTable";
+import { SellerOnlyNotice } from "@/components/SellerOnlyNotice";
+import { useAuth } from "@/lib/auth/AuthProvider";
 import { useCases } from "@/lib/api/hooks";
 import { formatDate, formatStatus } from "@/lib/format";
 
@@ -16,8 +18,19 @@ const columns: Column<SupportCase>[] = [
 ];
 
 export default function CasesPage() {
-  const cases = useCases();
+  const { roles } = useAuth();
+  const isAdmin = roles.includes("admin");
+  const cases = useCases({ enabled: !isAdmin });
   const rows = cases.data?.items ?? [];
+
+  if (isAdmin) {
+    return (
+      <div>
+        <PageHeading>Cases</PageHeading>
+        <SellerOnlyNotice />
+      </div>
+    );
+  }
 
   return (
     <div>

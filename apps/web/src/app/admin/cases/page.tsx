@@ -5,7 +5,7 @@ import type { components } from "@copilot/api-client";
 import { PageHeading } from "@/components/PageHeading";
 import { StatusFilter } from "@/components/StatusFilter";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { useAdminCases, useUpdateAdminCase } from "@/lib/api/hooks";
+import { useAdminCases, useMe, useUpdateAdminCase } from "@/lib/api/hooks";
 import { formatDate, formatStatus } from "@/lib/format";
 
 type CaseStatus = components["schemas"]["CaseStatus"];
@@ -50,11 +50,18 @@ function TransitionButton({ caseId, status }: { caseId: string; status: CaseStat
 
 function AdminCasesList() {
   const [status, setStatus] = useState<CaseStatus | "">("");
+  const me = useMe();
   const cases = useAdminCases(status || undefined);
   const rows = cases.data?.items ?? [];
 
   return (
     <div>
+      {me.data && (
+        <p className="mt-1 text-slate-600 dark:text-slate-400">
+          Welcome back, {me.data.display_name ?? "Admin"}.
+        </p>
+      )}
+
       <div className="mt-4">
         <StatusFilter
           id="admin-case-status-filter"
