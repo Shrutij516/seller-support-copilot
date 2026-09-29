@@ -310,6 +310,14 @@
             "title": "Listing Id",
             "type": "string"
           },
+          "listing_sku": {
+            "title": "Listing Sku",
+            "type": "string"
+          },
+          "listing_title": {
+            "title": "Listing Title",
+            "type": "string"
+          },
           "quantity": {
             "title": "Quantity",
             "type": "integer"
@@ -321,6 +329,8 @@
         },
         "required": [
           "listing_id",
+          "listing_title",
+          "listing_sku",
           "quantity",
           "unit_price_cents"
         ],

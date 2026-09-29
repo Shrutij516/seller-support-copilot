@@ -7,7 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from copilot_api.models import OrderStatus
 from tests.integration.conftest import mint_token
-from tests.integration.factories import create_order, create_seller
+from tests.integration.factories import (
+    create_listing,
+    create_order,
+    create_order_item,
+    create_seller,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -71,6 +76,55 @@ async def test_get_own_order_returns_items(
     assert body["id"] == str(order.id)
     assert body["status"] == "shipped"
     assert body["items"] == []
+
+
+async def test_get_order_items_include_listing_title_and_sku(
+    api_client: TestClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    rsa_keypair: RSAPrivateKey,
+) -> None:
+    async with session_factory() as session, session.begin():
+        seller = await create_seller(session, cognito_sub="sub-order-items")
+        listing = await create_listing(
+            session, seller.id, title="Wireless Mouse", sku="SKU-MOUSE01", price_cents=2599
+        )
+        order = await create_order(session, seller.id, status=OrderStatus.SHIPPED)
+        await create_order_item(session, order.id, listing.id, quantity=2, unit_price_cents=2599)
+
+    token = mint_token(rsa_keypair, sub="sub-order-items", groups=["seller"])
+    response = api_client.get(
+        f"/v1/orders/{order.id}", headers={"Authorization": f"Bearer {token}"}
+    )
+
+    assert response.status_code == 200
+    items = response.json()["items"]
+    assert len(items) == 1
+    assert items[0]["listing_title"] == "Wireless Mouse"
+    assert items[0]["listing_sku"] == "SKU-MOUSE01"
+    assert items[0]["quantity"] == 2
+    assert items[0]["unit_price_cents"] == 2599
+
+
+async def test_list_orders_items_include_listing_title_and_sku(
+    api_client: TestClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    rsa_keypair: RSAPrivateKey,
+) -> None:
+    async with session_factory() as session, session.begin():
+        seller = await create_seller(session, cognito_sub="sub-list-order-items")
+        listing = await create_listing(
+            session, seller.id, title="Ceramic Mug", sku="SKU-MUG01", price_cents=1299
+        )
+        order = await create_order(session, seller.id, status=OrderStatus.SHIPPED)
+        await create_order_item(session, order.id, listing.id, unit_price_cents=1299)
+
+    token = mint_token(rsa_keypair, sub="sub-list-order-items", groups=["seller"])
+    response = api_client.get("/v1/orders", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 200
+    items = response.json()["items"][0]["items"]
+    assert items[0]["listing_title"] == "Ceramic Mug"
+    assert items[0]["listing_sku"] == "SKU-MUG01"
 
 
 # --- refund-requests: 201 / 409 / 422 ---

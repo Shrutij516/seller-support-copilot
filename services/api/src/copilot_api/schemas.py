@@ -49,6 +49,8 @@ class ListingResponse(ResponseModel):
 
 class OrderItemResponse(ResponseModel):
     listing_id: uuid.UUID
+    listing_title: str
+    listing_sku: str
     quantity: int
     unit_price_cents: int
 

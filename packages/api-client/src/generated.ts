@@ -351,6 +351,10 @@ export interface components {
              * Format: uuid
              */
             listing_id: string;
+            /** Listing Sku */
+            listing_sku: string;
+            /** Listing Title */
+            listing_title: string;
             /** Quantity */
             quantity: number;
             /** Unit Price Cents */

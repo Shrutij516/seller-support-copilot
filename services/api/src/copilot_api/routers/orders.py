@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 from copilot_api.auth import require_seller
 from copilot_api.deps import get_db_session
 from copilot_api.errors import conflict, not_found, unprocessable
-from copilot_api.models import Order, OrderStatus
+from copilot_api.models import Order, OrderItem, OrderStatus
 from copilot_api.pagination import decode_orders_cursor, encode_orders_cursor
 from copilot_api.schemas import (
     OrderItemResponse,
@@ -27,6 +27,16 @@ from copilot_api.services.refunds import (
 router = APIRouter(prefix="/v1", tags=["orders"])
 
 
+def _order_item_response(item: OrderItem) -> OrderItemResponse:
+    return OrderItemResponse(
+        listing_id=item.listing_id,
+        listing_title=item.listing.title,
+        listing_sku=item.listing.sku,
+        quantity=item.quantity,
+        unit_price_cents=item.unit_price_cents,
+    )
+
+
 def _order_response(order: Order) -> OrderResponse:
     return OrderResponse(
         id=order.id,
@@ -37,7 +47,7 @@ def _order_response(order: Order) -> OrderResponse:
         placed_at=order.placed_at,
         delivered_at=order.delivered_at,
         updated_at=order.updated_at,
-        items=[OrderItemResponse.model_validate(item) for item in order.items],
+        items=[_order_item_response(item) for item in order.items],
     )
 
 
@@ -49,7 +59,11 @@ async def list_orders(
     limit: int = Query(default=20, ge=1, le=100),
     cursor: str | None = Query(default=None),
 ) -> OrderListResponse:
-    stmt = select(Order).where(Order.seller_id == seller_id).options(selectinload(Order.items))
+    stmt = (
+        select(Order)
+        .where(Order.seller_id == seller_id)
+        .options(selectinload(Order.items).selectinload(OrderItem.listing))
+    )
     if status is not None:
         stmt = stmt.where(Order.status == status)
     if cursor:
@@ -77,11 +91,11 @@ async def get_order(
     stmt = (
         select(Order)
         .where(Order.id == order_id, Order.seller_id == seller_id)
-        .options(selectinload(Order.items))
+        .options(selectinload(Order.items).selectinload(OrderItem.listing))
     )
     order = (await session.execute(stmt)).scalar_one_or_none()
     if order is None:
-        raise not_found("order not found")
+        raise not_found("Order not found.")
     return _order_response(order)
 
 
@@ -97,9 +111,9 @@ async def create_refund_request(
     try:
         case = await request_refund(session, seller_id, order_id, body.reason)
     except OrderNotFound as exc:
-        raise not_found("order not found") from exc
+        raise not_found("Order not found.") from exc
     except AlreadyRequested as exc:
-        raise conflict("a refund request is already open for this order") from exc
+        raise conflict("A refund request is already open for this order.") from exc
     except NotEligible as exc:
         raise unprocessable(exc.reason) from exc
     return SupportCaseResponse.model_validate(case)
