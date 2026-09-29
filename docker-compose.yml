@@ -38,6 +38,9 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-dummy}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-dummy}
       CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-http://localhost:3000}
+      COGNITO_ISSUER: ${COGNITO_ISSUER:-}
+      COGNITO_JWKS_URL: ${COGNITO_JWKS_URL:-}
+      COGNITO_APP_CLIENT_ID: ${COGNITO_APP_CLIENT_ID:-}
     ports:
       - "8000:8000"
     depends_on:
