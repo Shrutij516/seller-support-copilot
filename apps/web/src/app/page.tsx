@@ -57,14 +57,14 @@ function Dashboard() {
             Recent orders
           </h2>
           <div aria-live="polite" className="mt-3">
-            {orders.isLoading && <p className="text-slate-500">Loading orders...</p>}
+            {orders.isLoading && <p className="text-slate-500 dark:text-slate-400">Loading orders...</p>}
             {orders.isError && (
               <p role="alert" className="text-red-700 dark:text-red-400">
                 {orders.error instanceof Error ? orders.error.message : "Could not load orders."}
               </p>
             )}
             {orders.isSuccess && recentOrders.length === 0 && (
-              <p className="text-slate-500">No orders yet.</p>
+              <p className="text-slate-500 dark:text-slate-400">No orders yet.</p>
             )}
             {recentOrders.length > 0 && (
               <ul className="divide-y divide-slate-200 dark:divide-slate-800">
@@ -75,7 +75,7 @@ function Dashboard() {
                       className="flex items-center justify-between gap-2 hover:underline"
                     >
                       <span>{order.buyer_ref}</span>
-                      <span className="text-sm text-slate-500">{formatStatus(order.status)}</span>
+                      <span className="text-sm text-slate-500 dark:text-slate-400">{formatStatus(order.status)}</span>
                       <span className="font-medium">{formatCents(order.total_cents, order.currency)}</span>
                     </Link>
                   </li>
@@ -93,14 +93,14 @@ function Dashboard() {
             Open cases
           </h2>
           <div aria-live="polite" className="mt-3">
-            {cases.isLoading && <p className="text-slate-500">Loading cases...</p>}
+            {cases.isLoading && <p className="text-slate-500 dark:text-slate-400">Loading cases...</p>}
             {cases.isError && (
               <p role="alert" className="text-red-700 dark:text-red-400">
                 {cases.error instanceof Error ? cases.error.message : "Could not load cases."}
               </p>
             )}
             {cases.isSuccess && openCases.length === 0 && (
-              <p className="text-slate-500">No open cases.</p>
+              <p className="text-slate-500 dark:text-slate-400">No open cases.</p>
             )}
             {openCases.length > 0 && (
               <ul className="divide-y divide-slate-200 dark:divide-slate-800">
@@ -111,7 +111,7 @@ function Dashboard() {
                       className="flex items-center justify-between gap-2 hover:underline"
                     >
                       <span className="truncate">{supportCase.description}</span>
-                      <span className="text-sm text-slate-500">{formatStatus(supportCase.status)}</span>
+                      <span className="text-sm text-slate-500 dark:text-slate-400">{formatStatus(supportCase.status)}</span>
                     </Link>
                   </li>
                 ))}

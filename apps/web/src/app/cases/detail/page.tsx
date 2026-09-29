@@ -25,7 +25,7 @@ function CaseDetailContent() {
     <div>
       <PageHeading>Case detail</PageHeading>
       <div aria-live="polite" className="mt-4">
-        {supportCase.isLoading && <p className="text-slate-500">Loading case...</p>}
+        {supportCase.isLoading && <p className="text-slate-500 dark:text-slate-400">Loading case...</p>}
         {supportCase.isError && (
           <p role="alert" className="text-red-700 dark:text-red-400">
             {supportCase.error.message}
@@ -34,24 +34,24 @@ function CaseDetailContent() {
         {supportCase.isSuccess && supportCase.data && (
           <dl className="grid grid-cols-1 gap-3 rounded-lg border border-slate-200 p-4 text-sm sm:grid-cols-2 dark:border-slate-800">
             <div className="sm:col-span-2">
-              <dt className="text-slate-500">Description</dt>
+              <dt className="text-slate-500 dark:text-slate-400">Description</dt>
               <dd className="font-medium">{supportCase.data.description}</dd>
             </div>
             <div>
-              <dt className="text-slate-500">Type</dt>
+              <dt className="text-slate-500 dark:text-slate-400">Type</dt>
               <dd className="font-medium">{formatStatus(supportCase.data.type)}</dd>
             </div>
             <div>
-              <dt className="text-slate-500">Status</dt>
+              <dt className="text-slate-500 dark:text-slate-400">Status</dt>
               <dd className="font-medium">{formatStatus(supportCase.data.status)}</dd>
             </div>
             <div>
-              <dt className="text-slate-500">Opened</dt>
+              <dt className="text-slate-500 dark:text-slate-400">Opened</dt>
               <dd className="font-medium">{formatDate(supportCase.data.created_at)}</dd>
             </div>
             {supportCase.data.order_id && (
               <div>
-                <dt className="text-slate-500">Order</dt>
+                <dt className="text-slate-500 dark:text-slate-400">Order</dt>
                 <dd className="font-medium">
                   <Link
                     href={`/orders/detail?id=${supportCase.data.order_id}`}
@@ -71,7 +71,7 @@ function CaseDetailContent() {
 
 export default function CaseDetailPage() {
   return (
-    <Suspense fallback={<p className="text-slate-500">Loading...</p>}>
+    <Suspense fallback={<p className="text-slate-500 dark:text-slate-400">Loading...</p>}>
       <CaseDetailContent />
     </Suspense>
   );

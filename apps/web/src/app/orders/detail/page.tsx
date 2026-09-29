@@ -61,7 +61,7 @@ export function RefundForm({ orderId }: { orderId: string }) {
           aria-errormessage={validationError ? "refund-reason-error" : undefined}
           className="mt-1 w-full rounded-md border border-slate-300 p-2 text-sm dark:border-slate-700 dark:bg-slate-900"
         />
-        <p id="refund-reason-hint" className="mt-1 text-xs text-slate-500">
+        <p id="refund-reason-hint" className="mt-1 text-xs text-slate-500 dark:text-slate-400">
           {reason.length}/{REASON_MAX} characters, minimum {REASON_MIN}
         </p>
         {validationError && (
@@ -108,7 +108,7 @@ function OrderDetailContent() {
     <div>
       <PageHeading>Order detail</PageHeading>
       <div aria-live="polite" className="mt-4">
-        {order.isLoading && <p className="text-slate-500">Loading order...</p>}
+        {order.isLoading && <p className="text-slate-500 dark:text-slate-400">Loading order...</p>}
         {order.isError && (
           <p role="alert" className="text-red-700 dark:text-red-400">
             {order.error.message}
@@ -118,26 +118,26 @@ function OrderDetailContent() {
           <>
             <dl className="grid grid-cols-2 gap-3 rounded-lg border border-slate-200 p-4 text-sm sm:grid-cols-3 dark:border-slate-800">
               <div>
-                <dt className="text-slate-500">Buyer</dt>
+                <dt className="text-slate-500 dark:text-slate-400">Buyer</dt>
                 <dd className="font-medium">{order.data.buyer_ref}</dd>
               </div>
               <div>
-                <dt className="text-slate-500">Status</dt>
+                <dt className="text-slate-500 dark:text-slate-400">Status</dt>
                 <dd className="font-medium">{formatStatus(order.data.status)}</dd>
               </div>
               <div>
-                <dt className="text-slate-500">Total</dt>
+                <dt className="text-slate-500 dark:text-slate-400">Total</dt>
                 <dd className="font-medium">
                   {formatCents(order.data.total_cents, order.data.currency)}
                 </dd>
               </div>
               <div>
-                <dt className="text-slate-500">Placed</dt>
+                <dt className="text-slate-500 dark:text-slate-400">Placed</dt>
                 <dd className="font-medium">{formatDate(order.data.placed_at)}</dd>
               </div>
               {order.data.delivered_at && (
                 <div>
-                  <dt className="text-slate-500">Delivered</dt>
+                  <dt className="text-slate-500 dark:text-slate-400">Delivered</dt>
                   <dd className="font-medium">{formatDate(order.data.delivered_at)}</dd>
                 </div>
               )}
@@ -162,7 +162,7 @@ function OrderDetailContent() {
               {order.data.status === "delivered" ? (
                 <RefundForm orderId={order.data.id} />
               ) : (
-                <p className="mt-2 text-sm text-slate-500">
+                <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
                   Refunds can only be requested for delivered orders.
                 </p>
               )}
@@ -176,7 +176,7 @@ function OrderDetailContent() {
 
 export default function OrderDetailPage() {
   return (
-    <Suspense fallback={<p className="text-slate-500">Loading...</p>}>
+    <Suspense fallback={<p className="text-slate-500 dark:text-slate-400">Loading...</p>}>
       <OrderDetailContent />
     </Suspense>
   );

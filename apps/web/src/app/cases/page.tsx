@@ -24,7 +24,7 @@ export default function CasesPage() {
       <PageHeading>Cases</PageHeading>
 
       <div aria-live="polite" className="mt-4">
-        {cases.isLoading && <p className="text-slate-500">Loading cases...</p>}
+        {cases.isLoading && <p className="text-slate-500 dark:text-slate-400">Loading cases...</p>}
         {cases.isError && (
           <p role="alert" className="text-red-700 dark:text-red-400">
             {cases.error.message}

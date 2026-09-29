@@ -48,7 +48,7 @@ export default function OrdersPage() {
       </div>
 
       <div aria-live="polite" className="mt-4">
-        {orders.isLoading && <p className="text-slate-500">Loading orders...</p>}
+        {orders.isLoading && <p className="text-slate-500 dark:text-slate-400">Loading orders...</p>}
         {orders.isError && (
           <p role="alert" className="text-red-700 dark:text-red-400">
             {orders.error instanceof Error ? orders.error.message : "Could not load orders."}

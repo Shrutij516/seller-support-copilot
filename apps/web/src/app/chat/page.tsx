@@ -61,7 +61,7 @@ export default function ChatPage() {
   return (
     <div>
       <PageHeading>Chat</PageHeading>
-      <p className="mt-1 text-sm text-slate-500">
+      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
         The assistant isn&apos;t connected yet; this shows session and message history only.
       </p>
 
@@ -71,18 +71,18 @@ export default function ChatPage() {
 
       <div className="mt-6 grid gap-6 md:grid-cols-[16rem_1fr]">
         <section aria-labelledby="chat-sessions-heading">
-          <h2 id="chat-sessions-heading" className="text-sm font-semibold text-slate-500">
+          <h2 id="chat-sessions-heading" className="text-sm font-semibold text-slate-500 dark:text-slate-400">
             Sessions
           </h2>
           <div aria-live="polite" className="mt-2">
-            {sessions.isLoading && <p className="text-slate-500">Loading sessions...</p>}
+            {sessions.isLoading && <p className="text-slate-500 dark:text-slate-400">Loading sessions...</p>}
             {sessions.isError && (
               <p role="alert" className="text-red-700 dark:text-red-400">
                 {sessions.error.message}
               </p>
             )}
             {sessions.isSuccess && sessionList.length === 0 && (
-              <p className="text-slate-500">No sessions yet.</p>
+              <p className="text-slate-500 dark:text-slate-400">No sessions yet.</p>
             )}
             {sessionList.length > 0 && (
               <ul className="space-y-1">
@@ -108,19 +108,19 @@ export default function ChatPage() {
         </section>
 
         <section aria-labelledby="chat-messages-heading">
-          <h2 id="chat-messages-heading" className="text-sm font-semibold text-slate-500">
+          <h2 id="chat-messages-heading" className="text-sm font-semibold text-slate-500 dark:text-slate-400">
             Messages
           </h2>
           <div aria-live="polite" className="mt-2 min-h-[8rem]">
-            {!activeId && <p className="text-slate-500">Select or start a session.</p>}
-            {activeId && messages.isLoading && <p className="text-slate-500">Loading messages...</p>}
+            {!activeId && <p className="text-slate-500 dark:text-slate-400">Select or start a session.</p>}
+            {activeId && messages.isLoading && <p className="text-slate-500 dark:text-slate-400">Loading messages...</p>}
             {activeId && messages.isError && (
               <p role="alert" className="text-red-700 dark:text-red-400">
                 {messages.error.message}
               </p>
             )}
             {activeId && messages.isSuccess && messages.data.items.length === 0 && (
-              <p className="text-slate-500">No messages in this session yet.</p>
+              <p className="text-slate-500 dark:text-slate-400">No messages in this session yet.</p>
             )}
             {activeId && messages.isSuccess && messages.data.items.length > 0 && (
               <ul className="space-y-2">
@@ -129,7 +129,7 @@ export default function ChatPage() {
                     key={message.message_id}
                     className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800"
                   >
-                    <p className="text-xs font-semibold text-slate-500 uppercase">{message.role}</p>
+                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">{message.role}</p>
                     <p className="mt-1">{message.content}</p>
                     <p className="mt-1 text-xs text-slate-400">{formatDate(message.created_at)}</p>
                   </li>

@@ -66,13 +66,13 @@ function AdminCasesList() {
       </div>
 
       <div aria-live="polite" className="mt-4">
-        {cases.isLoading && <p className="text-slate-500">Loading cases...</p>}
+        {cases.isLoading && <p className="text-slate-500 dark:text-slate-400">Loading cases...</p>}
         {cases.isError && (
           <p role="alert" className="text-red-700 dark:text-red-400">
             {cases.error.message}
           </p>
         )}
-        {cases.isSuccess && rows.length === 0 && <p className="text-slate-500">No cases match this filter.</p>}
+        {cases.isSuccess && rows.length === 0 && <p className="text-slate-500 dark:text-slate-400">No cases match this filter.</p>}
 
         {rows.length > 0 && (
           <ul className="mt-2 space-y-3">
@@ -83,7 +83,7 @@ function AdminCasesList() {
               >
                 <div>
                   <p className="font-medium">{c.description}</p>
-                  <p className="text-sm text-slate-500">
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
                     {formatStatus(c.type)} &middot; {formatStatus(c.status)} &middot; opened{" "}
                     {formatDate(c.created_at)}
                   </p>
@@ -106,7 +106,7 @@ export default function AdminCasesPage() {
     <div>
       <PageHeading>Admin: cases</PageHeading>
 
-      {isLoading && <p className="mt-4 text-slate-500">Loading...</p>}
+      {isLoading && <p className="mt-4 text-slate-500 dark:text-slate-400">Loading...</p>}
 
       {!isLoading && !user && (
         <p className="mt-4 text-slate-600 dark:text-slate-400">Sign in to continue.</p>

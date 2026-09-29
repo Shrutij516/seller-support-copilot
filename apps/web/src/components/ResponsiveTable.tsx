@@ -29,7 +29,7 @@ export function ResponsiveTable<T>({
   emptyMessage,
 }: ResponsiveTableProps<T>) {
   if (rows.length === 0) {
-    return <p className="text-slate-500">{emptyMessage}</p>;
+    return <p className="text-slate-500 dark:text-slate-400">{emptyMessage}</p>;
   }
 
   return (
@@ -75,7 +75,7 @@ export function ResponsiveTable<T>({
               <dl className="mt-2 space-y-1 text-sm">
                 {rest.map((col) => (
                   <div key={col.header} className="flex justify-between gap-3">
-                    <dt className="text-slate-500">{col.header}</dt>
+                    <dt className="text-slate-500 dark:text-slate-400">{col.header}</dt>
                     <dd>{col.cell(row)}</dd>
                   </div>
                 ))}
