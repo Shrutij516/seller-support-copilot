@@ -97,6 +97,7 @@ jobs:
       - run: pnpm --filter @copilot/api-client run typecheck
       - run: pnpm --filter @copilot/web run lint
       - run: pnpm --filter @copilot/web run typecheck
+      - run: pnpm --filter @copilot/web run test
       - run: pnpm --filter @copilot/web run build
         env:
           NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
