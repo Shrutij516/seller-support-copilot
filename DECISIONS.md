@@ -116,12 +116,22 @@ build; don't let it drift from the code.
 
 ## Keyset (seek) pagination over offset
 
-- Status: In use (`GET /v1/orders`)
+- Status: In use (`GET /v1/orders`; `GET /v1/admin/cases` uses the same technique on `(status, created_at, id)`, see "Admin case queue ordering" below)
 - What it does: Pages on `(placed_at, id)` with an opaque cursor, instead of `LIMIT/OFFSET`.
 - Why we chose it: Offset pagination shifts under concurrent writes: an order inserted between two page fetches shifts every row after it, causing skipped or duplicated results. Keyset pagination has no such window, since each page's query is "everything before this exact key," not "the Nth through Mth row."
 - Rejected alternative: `OFFSET`/`LIMIT`. Familiar and simpler to implement, but gets slower on deep pages (the DB still scans and discards every skipped row) and isn't stable under concurrent inserts.
 - Tradeoff we accept: No "jump to page 7," only forward paging from a cursor. Fine for an API meant to be paged through, not randomly accessed.
 - Revisit if: A UI need genuinely requires arbitrary page jumps, not just "next."
+
+## Admin case queue ordering (status, then FIFO)
+
+- Status: In use (`GET /v1/admin/cases`)
+- What it does: Default order is `status, created_at, id`, all ascending: open cases first, then in_progress, then resolved; oldest first (FIFO) within each status; id as the final tiebreaker. `case_status` is a native Postgres enum declared `open, in_progress, resolved` (see `migrations/.../95d6744ed870_initial_schema.py`), and Postgres orders native enum values by their declaration position, not alphabetically, so `ORDER BY status` already sorts by queue priority for free, no `CASE WHEN` rank mapping needed.
+- Why we chose it: This is a work queue, not a feed. An admin needs open cases surfaced before resolved ones regardless of when each was touched, and within a status, the case that's been waiting longest should be handled first (FIFO), the same expectation any support queue has. `created_at` alone (the old, effectively-unordered default) puts a case resolved five minutes ago ahead of one that's been open for a week.
+- Why id as the final tiebreaker: two cases can share the same `created_at` (seed data does, and a bulk import could too); without a tiebreaker, keyset pagination's "everything after this key" has no way to draw a line through a tie, and the DB is free to return them in a different order on every fetch, which can skip or duplicate rows across pages. Id is unique per row, so `(status, created_at, id)` is always a strict order, never a tie.
+- Rejected alternative: Sort by `created_at` only (matches every other list in this API: orders, seller cases). Consistent with those, but wrong for this specific view: an admin's queue is triaged by urgency-then-age, not just age, and those other lists are each scoped to one seller's own items, where recency is what a seller actually wants first.
+- Tradeoff we accept: A case's position in the list changes when its status changes (it moves from the open group to the in_progress group), which is correct but means "the row I was just looking at" isn't guaranteed to stay in the same spot after a background refetch; the admin UI's cache update mitigates this for the specific case being transitioned (see `apps/web/src/lib/api/hooks.ts`'s `useUpdateAdminCase`), patching it in place rather than letting an immediate re-sort happen under the cursor.
+- Revisit if: The queue needs a different triage order (e.g., by case type, or a manually set priority field) that this fixed three-column sort can't express.
 
 ## application/problem+json for every error
 
