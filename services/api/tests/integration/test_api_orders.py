@@ -41,6 +41,24 @@ async def test_get_order_not_owned_is_404(
     assert response.headers["content-type"] == "application/problem+json"
 
 
+async def test_admin_can_view_any_order(
+    api_client: TestClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    rsa_keypair: RSAPrivateKey,
+) -> None:
+    async with session_factory() as session, session.begin():
+        owner = await create_seller(session, cognito_sub="sub-owner-for-admin")
+        order = await create_order(session, owner.id, status=OrderStatus.SHIPPED)
+
+    token = mint_token(rsa_keypair, sub="sub-admin-viewer", groups=["admin"])
+    response = api_client.get(
+        f"/v1/orders/{order.id}", headers={"Authorization": f"Bearer {token}"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["id"] == str(order.id)
+
+
 async def test_get_order_not_found_is_404(
     api_client: TestClient,
     session_factory: async_sessionmaker[AsyncSession],

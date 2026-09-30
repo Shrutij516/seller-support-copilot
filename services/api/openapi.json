@@ -1,6 +1,85 @@
 {
   "components": {
     "schemas": {
+      "AdminCaseListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminCaseResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "AdminCaseListResponse",
+        "type": "object"
+      },
+      "AdminCaseResponse": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "order_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Id"
+          },
+          "seller_display_name": {
+            "title": "Seller Display Name",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CaseStatus"
+          },
+          "type": {
+            "$ref": "#/components/schemas/CaseType"
+          }
+        },
+        "required": [
+          "id",
+          "order_id",
+          "type",
+          "status",
+          "description",
+          "created_at",
+          "seller_display_name"
+        ],
+        "title": "AdminCaseResponse",
+        "type": "object"
+      },
       "AdminCaseUpdateBody": {
         "additionalProperties": false,
         "properties": {
@@ -619,6 +698,34 @@
               ],
               "title": "Status"
             }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
           }
         ],
         "responses": {
@@ -626,7 +733,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CaseListResponse"
+                  "$ref": "#/components/schemas/AdminCaseListResponse"
                 }
               }
             },
@@ -679,7 +786,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SupportCaseResponse"
+                  "$ref": "#/components/schemas/AdminCaseResponse"
                 }
               }
             },

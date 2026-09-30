@@ -179,13 +179,13 @@ def _make_orders_and_items(
     rng: random.Random,
     sellers: list[Seller],
     listings: list[Listing],
+    now: datetime,
 ) -> tuple[list[Order], list[OrderItem]]:
     listings_by_seller: dict[uuid.UUID, list[Listing]] = defaultdict(list)
     for listing in listings:
         listings_by_seller[listing.seller_id].append(listing)
     sellers_with_listings = [s for s in sellers if listings_by_seller[s.id]]
 
-    now = datetime.now(UTC)
     orders: list[Order] = []
     items: list[OrderItem] = []
 
@@ -219,7 +219,21 @@ def _make_orders_and_items(
     return orders, items
 
 
-def _make_support_cases(rng: random.Random, orders: list[Order]) -> list[SupportCase]:
+def _case_created_at(rng: random.Random, order: Order, now: datetime) -> datetime:
+    """A buyer files a refund request sometime after delivery, not at seed-run time (the old
+    behavior: no created_at was set, so every case defaulted to func.now(), making every
+    case's timeline look identical and unrelated to its order's). 1 hour to 14 days after
+    delivered_at, capped at `now` so it's never in the future.
+    """
+    if order.delivered_at is None:
+        raise ValueError(f"order {order.id} has a case but no delivered_at")
+    gap = timedelta(hours=rng.randint(1, 24 * 14))
+    return min(order.delivered_at + gap, now)
+
+
+def _make_support_cases(
+    rng: random.Random, orders: list[Order], now: datetime
+) -> list[SupportCase]:
     """One support_case per refund_requested/refunded order, so the seeded data satisfies
     the same invariant the app maintains: refund_requested -> exactly one open refund_request
     case; refunded -> exactly one resolved one.
@@ -236,6 +250,7 @@ def _make_support_cases(rng: random.Random, orders: list[Order]) -> list[Support
                 type=CaseType.REFUND_REQUEST,
                 status=case_status,
                 description=rng.choice(REFUND_CASE_DESCRIPTIONS),
+                created_at=_case_created_at(rng, order, now),
             )
         )
     return cases
@@ -248,6 +263,7 @@ async def seed_data(session: AsyncSession) -> dict[str, int]:
     Faker.seed(SEED)
     fake = Faker()
     rng = random.Random(SEED)
+    now = datetime.now(UTC)
 
     sellers = _make_sellers(fake, rng)
     session.add_all(sellers)
@@ -257,12 +273,12 @@ async def seed_data(session: AsyncSession) -> dict[str, int]:
     session.add_all(listings)
     await session.flush()
 
-    orders, items = _make_orders_and_items(fake, rng, sellers, listings)
+    orders, items = _make_orders_and_items(fake, rng, sellers, listings, now)
     session.add_all(orders)
     session.add_all(items)
     await session.flush()
 
-    cases = _make_support_cases(rng, orders)
+    cases = _make_support_cases(rng, orders, now)
     session.add_all(cases)
     await session.flush()
 

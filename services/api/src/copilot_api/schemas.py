@@ -130,3 +130,18 @@ class ChatMessageListResponse(BaseModel):
 
 class AdminCaseUpdateBody(ApiModel):
     status: CaseStatus
+
+
+class AdminCaseResponse(ResponseModel):
+    id: uuid.UUID
+    order_id: uuid.UUID | None
+    type: CaseType
+    status: CaseStatus
+    description: str
+    created_at: datetime
+    seller_display_name: str
+
+
+class AdminCaseListResponse(BaseModel):
+    items: list[AdminCaseResponse]
+    next_cursor: str | None

@@ -165,3 +165,29 @@ async def test_seeded_case_descriptions_are_not_lorem_text(
         assert any(term in lowered for term in domain_terms), (
             f"case {case.id} description doesn't read like real support text: {case.description!r}"
         )
+
+
+async def test_seeded_case_created_at_follows_the_order_timeline(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with session_factory() as session, session.begin():
+        await seed_data(session)
+
+    async with session_factory() as verify:
+        orders = (await verify.execute(select(Order))).scalars().all()
+        cases = (await verify.execute(select(SupportCase))).scalars().all()
+
+    assert cases  # sanity: the fixed seed actually produces some, or this is vacuous
+    orders_by_id = {order.id: order for order in orders}
+    now = datetime.now(UTC)
+    for case in cases:
+        assert case.order_id is not None
+        order = orders_by_id[case.order_id]
+        assert order.delivered_at is not None
+        # Filed sometime after delivery (not at whatever moment `make seed` happened to run),
+        # and never in the future relative to seeding.
+        assert case.created_at >= order.delivered_at, (
+            f"case {case.id} created_at {case.created_at} is before its order's "
+            f"delivered_at {order.delivered_at}"
+        )
+        assert case.created_at <= now

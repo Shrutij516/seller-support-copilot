@@ -230,6 +230,34 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AdminCaseListResponse */
+        AdminCaseListResponse: {
+            /** Items */
+            items: components["schemas"]["AdminCaseResponse"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /** AdminCaseResponse */
+        AdminCaseResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Order Id */
+            order_id: string | null;
+            /** Seller Display Name */
+            seller_display_name: string;
+            status: components["schemas"]["CaseStatus"];
+            type: components["schemas"]["CaseType"];
+        };
         /** AdminCaseUpdateBody */
         AdminCaseUpdateBody: {
             status: components["schemas"]["CaseStatus"];
@@ -500,6 +528,8 @@ export interface operations {
         parameters: {
             query?: {
                 status?: components["schemas"]["CaseStatus"] | null;
+                limit?: number;
+                cursor?: string | null;
             };
             header?: never;
             path?: never;
@@ -513,7 +543,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CaseListResponse"];
+                    "application/json": components["schemas"]["AdminCaseListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -548,7 +578,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SupportCaseResponse"];
+                    "application/json": components["schemas"]["AdminCaseResponse"];
                 };
             };
             /** @description Validation Error */

@@ -126,6 +126,7 @@ async def create_case(
     status: CaseStatus = CaseStatus.OPEN,
     case_type: CaseType = CaseType.REFUND_REQUEST,
     description: str = "test case",
+    created_at: datetime | None = None,
 ) -> SupportCase:
     case = SupportCase(
         seller_id=seller_id,
@@ -134,6 +135,8 @@ async def create_case(
         status=status,
         description=description,
     )
+    if created_at is not None:
+        case.created_at = created_at
     session.add(case)
     await session.flush()
     return case

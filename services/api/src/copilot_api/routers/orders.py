@@ -5,7 +5,7 @@ from sqlalchemy import select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from copilot_api.auth import require_seller
+from copilot_api.auth import Principal, require_role, require_seller
 from copilot_api.deps import get_db_session
 from copilot_api.errors import conflict, not_found, unprocessable
 from copilot_api.models import Order, OrderItem, OrderStatus
@@ -85,14 +85,22 @@ async def list_orders(
 @router.get("/orders/{order_id}", response_model=OrderResponse)
 async def get_order(
     order_id: uuid.UUID,
-    seller_id: uuid.UUID = Depends(require_seller),
+    principal: Principal = Depends(require_role("seller", "admin")),
     session: AsyncSession = Depends(get_db_session),
 ) -> OrderResponse:
+    # An admin can look up any order by id (for example while working a case that
+    # references one); a seller only ever sees their own. Unlike require_seller, this
+    # doesn't 404 a seller-role principal with no linked seller row up front, since an
+    # admin-only principal legitimately has no seller_id either; both end up 404ing below
+    # when the (possibly seller-scoped) query finds nothing, which is the same "don't
+    # confirm whether the id exists" behavior require_seller's callers already rely on.
     stmt = (
         select(Order)
-        .where(Order.id == order_id, Order.seller_id == seller_id)
+        .where(Order.id == order_id)
         .options(selectinload(Order.items).selectinload(OrderItem.listing))
     )
+    if "admin" not in principal.roles:
+        stmt = stmt.where(Order.seller_id == principal.seller_id)
     order = (await session.execute(stmt)).scalar_one_or_none()
     if order is None:
         raise not_found("Order not found.")
