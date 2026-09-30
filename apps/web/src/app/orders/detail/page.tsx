@@ -3,7 +3,6 @@
 import { Suspense, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import { PageHeading } from "@/components/PageHeading";
-import { SellerOnlyNotice } from "@/components/SellerOnlyNotice";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useCreateRefundRequest, useOrder } from "@/lib/api/hooks";
 import { formatCents, formatDate, formatStatus } from "@/lib/format";
@@ -113,22 +112,16 @@ function OrderDetailContent() {
   const orderId = searchParams.get("id");
   const { roles } = useAuth();
   const isAdmin = roles.includes("admin");
-  const order = useOrder(orderId, { enabled: !isAdmin });
+  // Admins can view any order (for example while working a case that references one, see
+  // GET /v1/orders/{id} allowing "seller" or "admin"), but never request a refund on a
+  // seller's behalf, so the refund section below is seller-only.
+  const order = useOrder(orderId);
 
   if (!orderId) {
     return (
       <div>
         <PageHeading>Order not found</PageHeading>
         <p className="mt-2 text-slate-600 dark:text-slate-400">No order id was provided.</p>
-      </div>
-    );
-  }
-
-  if (isAdmin) {
-    return (
-      <div>
-        <PageHeading>Order detail</PageHeading>
-        <SellerOnlyNotice />
       </div>
     );
   }
@@ -195,13 +188,15 @@ function OrderDetailContent() {
               </div>
             )}
 
-            <div className="mt-6">
-              <h2 className="text-lg font-semibold">Request a refund</h2>
-              <RefundForm
-                orderId={order.data.id}
-                ineligibleReason={getRefundIneligibilityReason(order.data)}
-              />
-            </div>
+            {!isAdmin && (
+              <div className="mt-6">
+                <h2 className="text-lg font-semibold">Request a refund</h2>
+                <RefundForm
+                  orderId={order.data.id}
+                  ineligibleReason={getRefundIneligibilityReason(order.data)}
+                />
+              </div>
+            )}
           </>
         )}
       </div>

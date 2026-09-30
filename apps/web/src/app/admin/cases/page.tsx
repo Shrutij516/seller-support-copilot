@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import type { components } from "@copilot/api-client";
 import { PageHeading } from "@/components/PageHeading";
 import { StatusFilter } from "@/components/StatusFilter";
@@ -25,20 +26,26 @@ function TransitionButton({ caseId, status }: { caseId: string; status: CaseStat
   const mutation = useUpdateAdminCase();
   const next = NEXT_STATUS[status];
 
-  if (!next) {
-    return <span className="text-sm text-slate-400">No further action</span>;
-  }
-
   return (
     <div>
-      <button
-        type="button"
-        onClick={() => mutation.mutate({ caseId, status: next })}
-        disabled={mutation.isPending}
-        className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800"
-      >
-        {mutation.isPending ? "Updating..." : `Mark ${formatStatus(next)}`}
-      </button>
+      {next && (
+        <button
+          type="button"
+          onClick={() => mutation.mutate({ caseId, status: next })}
+          disabled={mutation.isPending}
+          className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800"
+        >
+          {mutation.isPending ? "Updating..." : `Mark ${formatStatus(next)}`}
+        </button>
+      )}
+      {!next && <span className="text-sm text-slate-400">No further action</span>}
+      {/* role="status" is an implicit aria-live="polite" region: announced without moving
+          focus, and stays visible as a small confirmation trail for this row. */}
+      {mutation.isSuccess && mutation.variables && (
+        <p role="status" className="mt-1 text-xs text-green-700 dark:text-green-400">
+          Updated to {formatStatus(mutation.variables.status)}.
+        </p>
+      )}
       {mutation.isError && (
         <p role="alert" className="mt-1 text-xs text-red-700 dark:text-red-400">
           {mutation.error.message}
@@ -52,7 +59,7 @@ function AdminCasesList() {
   const [status, setStatus] = useState<CaseStatus | "">("");
   const me = useMe();
   const cases = useAdminCases(status || undefined);
-  const rows = cases.data?.items ?? [];
+  const rows = cases.data?.pages.flatMap((page) => page.items) ?? [];
 
   return (
     <div>
@@ -76,7 +83,7 @@ function AdminCasesList() {
         {cases.isLoading && <p className="text-slate-500 dark:text-slate-400">Loading cases...</p>}
         {cases.isError && (
           <p role="alert" className="text-red-700 dark:text-red-400">
-            {cases.error.message}
+            {cases.error instanceof Error ? cases.error.message : "Could not load cases."}
           </p>
         )}
         {cases.isSuccess && rows.length === 0 && <p className="text-slate-500 dark:text-slate-400">No cases match this filter.</p>}
@@ -91,9 +98,17 @@ function AdminCasesList() {
                 <div>
                   <p className="font-medium">{c.description}</p>
                   <p className="text-sm text-slate-500 dark:text-slate-400">
-                    {formatStatus(c.type)} &middot; {formatStatus(c.status)} &middot; opened{" "}
-                    {formatDate(c.created_at)}
+                    {c.seller_display_name} &middot; {formatStatus(c.type)} &middot;{" "}
+                    {formatStatus(c.status)} &middot; opened {formatDate(c.created_at)}
                   </p>
+                  {c.order_id && (
+                    <Link
+                      href={`/orders/detail?id=${c.order_id}`}
+                      className="text-sm text-blue-700 underline dark:text-blue-400"
+                    >
+                      View order
+                    </Link>
+                  )}
                 </div>
                 <TransitionButton caseId={c.id} status={c.status} />
               </li>
@@ -101,6 +116,17 @@ function AdminCasesList() {
           </ul>
         )}
       </div>
+
+      {cases.hasNextPage && (
+        <button
+          type="button"
+          onClick={() => void cases.fetchNextPage()}
+          disabled={cases.isFetchingNextPage}
+          className="mt-4 rounded-md border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800"
+        >
+          {cases.isFetchingNextPage ? "Loading more..." : "Load more"}
+        </button>
+      )}
     </div>
   );
 }

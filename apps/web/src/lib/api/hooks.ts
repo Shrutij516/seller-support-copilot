@@ -1,12 +1,19 @@
 "use client";
 
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type InfiniteData,
+} from "@tanstack/react-query";
 import type { components } from "@copilot/api-client";
 import { getApiClient } from "./client";
 import { ApiError } from "./errors";
 
 type OrderStatus = components["schemas"]["OrderStatus"];
 type CaseStatus = components["schemas"]["CaseStatus"];
+type AdminCaseListResponse = components["schemas"]["AdminCaseListResponse"];
 
 export function useMe() {
   return useQuery({
@@ -137,15 +144,17 @@ export function useChatMessages(sessionId: string | null, options?: { enabled?: 
 }
 
 export function useAdminCases(status: CaseStatus | undefined) {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: ["admin-cases", status ?? null],
-    queryFn: async () => {
+    initialPageParam: undefined as string | undefined,
+    queryFn: async ({ pageParam }) => {
       const { data, error } = await getApiClient().GET("/v1/admin/cases", {
-        params: { query: { status } },
+        params: { query: { status, cursor: pageParam, limit: 20 } },
       });
       if (error) throw new ApiError(error);
       return data;
     },
+    getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
   });
 }
 
@@ -160,7 +169,27 @@ export function useUpdateAdminCase() {
       if (error) throw new ApiError(error);
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (updatedCase) => {
+      // Patch the case in place, in whatever page/position it's already cached at, instead
+      // of invalidating alone: an invalidate-triggered refetch re-sorts the whole list by
+      // the new canonical order (status changed), which would visibly jump or remove the row
+      // out from under the cursor right as the admin clicks it. The in-place update keeps
+      // today's position stable; the invalidate below still runs, so the list catches up to
+      // the real server order (and drops rows that no longer match an active status filter)
+      // the next time it's refetched, not synchronously with this click.
+      queryClient.setQueriesData<InfiniteData<AdminCaseListResponse>>(
+        { queryKey: ["admin-cases"] },
+        (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            pages: old.pages.map((page) => ({
+              ...page,
+              items: page.items.map((item) => (item.id === updatedCase.id ? updatedCase : item)),
+            })),
+          };
+        },
+      );
       void queryClient.invalidateQueries({ queryKey: ["admin-cases"] });
     },
   });
