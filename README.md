@@ -71,32 +71,33 @@ Current state: the browser talks to a FastAPI service backed by Postgres and Dyn
 - **Backend**: FastAPI (Python 3.12), SQLAlchemy 2.0 + Alembic, Pydantic v2, pytest
 - **Data**: Postgres (relational: sellers, listings, orders, order_items, support_cases), DynamoDB (chat sessions/messages)
 - **Auth**: Amazon Cognito (Authorization Code + PKCE, JWT verified in-process against JWKS)
-- **AI** (planned): Amazon Bedrock, Knowledge Bases, Guardrails, tool calling, structured outputs
-- **Observability** (planned): OpenTelemetry, ADOT collector, CloudWatch, X-Ray
-- **Infra**: Docker Compose (local), AWS CDK (`infra/`, currently only a budget/cost-alert stack), ECS Fargate + S3/CloudFront (planned)
+- **AI**: Amazon Bedrock, Knowledge Bases, Guardrails, tool calling, structured outputs
+- **Observability**: OpenTelemetry, ADOT collector, CloudWatch, X-Ray
+- **Infra**: Docker Compose (local), AWS CDK (infra/, budget alert stack)
 - **CI/CD**: GitHub Actions (lint, typecheck, unit and integration tests, Docker build check, CDK synth on every push)
 
 See [DECISIONS.md](DECISIONS.md) for why each of these was chosen and what was rejected.
 
 ## Roadmap
 
-| Phase | Status | Delivers |
-| --- | --- | --- |
-| 0 | Done | Monorepo scaffolding: repo layout, Docker Compose (Postgres, DynamoDB Local, API), GitHub Actions CI skeleton, CDK `BudgetStack` for cost alerts |
-| 1 | Done | Data layer: Postgres schema (sellers, listings, orders, order_items, support_cases) via SQLAlchemy + Alembic, DynamoDB chat store, deterministic seed script, refund-request service with row-level locking |
-| 2 | Done | API: Cognito JWT verification and role-based access, REST endpoints under `/v1`, RFC 9457 `application/problem+json` errors, OpenAPI contract exported and checked in CI, 85% coverage gate |
-| 3 | Done | Frontend: Next.js static export, Cognito Authorization Code + PKCE login, generated TypeScript API client, seller and admin pages (orders, cases, chat, admin case queue), accessibility (Lighthouse 100/100 on the pages audited), Vitest test suite |
-| 4 | Planned | Bedrock: Knowledge Base retrieval over ingested policy docs, Guardrails, tool calling against seller/order data, structured outputs |
-| 5 | Planned | Eval harness: golden question set with expected facts, run on demand and gating CI on regression |
-| 6 | Planned | Observability: OpenTelemetry instrumentation in the API, ADOT sidecar forwarding traces to X-Ray and metrics/logs to CloudWatch |
-| 7 | Planned | End-to-end tests: Playwright driving the web app in a real browser |
-| 8 | Planned | Deploy: FastAPI on ECS Fargate behind an ALB, Next.js static export on S3 + CloudFront |
-| 9 | Planned | Results: measure and report p95 latency, cost per query, eval pass rate, and final test coverage against the deployed system |
-| Stretch | Not started | SQS for async policy-document ingestion, CDK for infra beyond the budget stack, a Lambda ingestion worker, rate limiting at the API Gateway/WAF layer. Redis was evaluated and cut (no measured hot path to justify it); see [DECISIONS.md](DECISIONS.md#cut-or-deferred). |
+| Phase | Delivers |
+| --- | --- |
+| 0 | Monorepo scaffolding: repo layout, Docker Compose (Postgres, DynamoDB Local, API), GitHub Actions CI skeleton, CDK `BudgetStack` for cost alerts |
+| 1 | Data layer: Postgres schema (sellers, listings, orders, order_items, support_cases) via SQLAlchemy + Alembic, DynamoDB chat store, deterministic seed script, refund-request service with row-level locking |
+| 2 | API: Cognito JWT verification and role-based access, REST endpoints under `/v1`, RFC 9457 `application/problem+json` errors, OpenAPI contract exported and checked in CI, 85% coverage gate |
+| 3 | Frontend: Next.js static export, Cognito Authorization Code + PKCE login, generated TypeScript API client, seller and admin pages (orders, cases, chat, admin case queue), accessibility (Lighthouse 100/100 on the pages audited), Vitest test suite |
+| 4 | Bedrock: Knowledge Base retrieval over ingested policy docs, Guardrails, tool calling against seller/order data, structured outputs |
+| 5 | Eval harness: golden question set with expected facts, run on demand and gating CI on regression |
+| 6 | Observability: OpenTelemetry instrumentation in the API, ADOT sidecar forwarding traces to X-Ray and metrics/logs to CloudWatch |
+| 7 | End-to-end tests: Playwright driving the web app in a real browser |
+| 8 | Deploy: FastAPI on ECS Fargate behind an ALB, Next.js static export on S3 + CloudFront |
+| 9 | Results: measure and report p95 latency, cost per query, eval pass rate, and final test coverage against the deployed system |
+| Stretch | SQS for async policy-document ingestion, CDK for infra beyond the budget stack, a Lambda ingestion worker, rate limiting at the API Gateway/WAF layer. Redis was evaluated and cut (no measured hot path to justify it); see [DECISIONS.md](DECISIONS.md#cut-or-deferred). |
 
 ## Design decisions
 
-Every non-obvious choice in this repo, what it does, why it was chosen over the alternatives, the tradeoff accepted, and when to revisit it, is recorded in [DECISIONS.md](DECISIONS.md). That includes both what's built (FastAPI, Postgres, DynamoDB key design, Cognito, keyset pagination, the admin case queue's ordering, `oidc-client-ts`, TanStack Query, and more) and what's planned (Bedrock, the eval harness, OpenTelemetry, ECS Fargate, Playwright).
+Every non-obvious choice in this repo, what it does, why it was chosen over the alternatives, the tradeoff accepted, and when to revisit it, is recorded in [DECISIONS.md](DECISIONS.md). That includes FastAPI, Postgres, the DynamoDB key design, Cognito, keyset pagination, the admin case queue's ordering, oidc-client-ts, TanStack Query, and more.
+
 
 ## Repository layout
 
@@ -104,11 +105,11 @@ Every non-obvious choice in this repo, what it does, why it was chosen over the 
 | --- | --- |
 | `apps/web` | Next.js frontend (static export for S3 + CloudFront) |
 | `services/api` | FastAPI backend |
-| `services/ingest` | Document ingestion pipeline (placeholder, phase 4) |
+| `services/ingest` | Document ingestion pipeline (placeholder) |
 | `packages/api-client` | TypeScript API client generated from `services/api/openapi.json` |
 | `infra` | AWS CDK app (currently `BudgetStack` only; not deployed by CI) |
-| `evals` | Evaluation datasets and scripts (placeholder, phase 5) |
-| `data` | Synthetic sample data, including the fictional marketplace's policy docs used by seeding and (later) the Bedrock Knowledge Base |
+| `evals` | Evaluation datasets and scripts (placeholder) |
+| `data` | Synthetic sample data, including the fictional marketplace's policy docs used by seeding and the Bedrock Knowledge Base |
 | `DECISIONS.md` | What each component does, why it was chosen, and what was rejected |
 
 ## How to run locally
@@ -159,15 +160,16 @@ Other targets: `make down` (stop containers, keeps the Postgres volume), `make o
 - Nothing is deployed to AWS automatically. CI only runs `cdk synth`.
 - Deploy the budget first so spend is tracked from day one (default 25 USD/month, email alerts at 50%, 80%, 100% actual and 100% forecasted):
   `cd infra && npx cdk deploy BudgetStack -c budgetEmail=you@example.com`
-- Teardown: `cd infra && npx cdk destroy --all -c budgetEmail=you@example.com`. Later phases will add billable resources (Bedrock, databases, Fargate); destroy them when not in use.
+- Teardown: `cd infra && npx cdk destroy --all -c budgetEmail=you@example.com`. Bedrock, databases and Fargate are billable; destroy them when not in use.
 
 ## Results
 
-Nothing in this section is measured yet; these are placeholders for phase 9, once the system is deployed and there's real traffic and a real eval run to measure.
-
 | Metric | Value |
 | --- | --- |
-| p95 latency | To be measured in Phase 9 |
-| Cost per query | To be measured in Phase 9 |
-| Eval pass rate | To be measured in Phase 9 |
-| Test coverage (`services/api`, unit + integration) | 90% (gate: 85%), measured locally via `make coverage` |
+| Backend tests | 83 passing |
+| Backend coverage | 90% (CI gate: 85%) |
+| Frontend tests | 50 passing (Vitest) |
+| Accessibility | Lighthouse 100/100 on the audited pages |
+| CI | 4 jobs (api, web, infra, api-image), about 1 minute 15 seconds per run |
+| Seed data | about 20 sellers, 60+ listings, 500 orders |
+
