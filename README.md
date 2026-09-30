@@ -2,11 +2,11 @@
 
 An AI support assistant that helps e-commerce sellers get answers about marketplace policies, their orders, and their listings.
 
-> **Work in progress.** Phases 0 through 3 (data layer, API, frontend) are built and tested. Phases 4 through 9 (Bedrock, evals, observability, end-to-end tests, deployment, and measured results) are planned, not built. See the roadmap below for exactly what that means per phase.
+> **Work in progress.** 
 
 ## Architecture
 
-The diagram below is the **full planned system**, not what is deployed today. Nothing in this repo is currently running in AWS; see [Cost and teardown](#cost-and-teardown) and the roadmap for what actually exists yet.
+The diagram below shows the target architecture.
 
 ```mermaid
 flowchart TB
@@ -63,7 +63,7 @@ flowchart TB
     GHA -.->|build and test on every push| FrontendHosting
 ```
 
-Today, locally: the browser talks to a FastAPI process (in Docker or run directly), which talks to a real Postgres and a real DynamoDB, both running in Docker (`postgres`, `amazon/dynamodb-local`). Auth against Cognito is real (a real User Pool), everything else in the diagram outside "Frontend hosting", "Backend", "Auth", and "Data" is not built yet.
+Current state: the browser talks to a FastAPI service backed by Postgres and DynamoDB (both run locally in Docker), and sign-in uses a real Amazon Cognito user pool.
 
 ## Tech stack
 
