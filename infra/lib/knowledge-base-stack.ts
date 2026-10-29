@@ -8,8 +8,16 @@ import type { Construct } from "constructs";
 export const KB_REGION = "us-east-1";
 export const EMBEDDING_MODEL_ID = "amazon.titan-embed-text-v2:0";
 export const EMBEDDING_DIMENSIONS = 1024;
-export const CHUNK_MAX_TOKENS = 300;
-export const CHUNK_OVERLAP_PERCENT = 20;
+// Hierarchical chunking: small child chunks are embedded and matched (precise), and each match
+// is returned as its larger parent chunk (enough context that a fact isn't cut off mid-section).
+// Combined 1,150 tokens, far under the ~8,000 where AWS warns hierarchical metadata can exceed
+// S3 Vectors' 40 KB-per-vector limit. See DECISIONS.md, "Hierarchical chunking".
+export const PARENT_CHUNK_MAX_TOKENS = 1000;
+export const CHILD_CHUNK_MAX_TOKENS = 150;
+export const CHUNK_OVERLAP_TOKENS = 30;
+// Changing the chunking strategy forces CloudFormation to REPLACE the data source (create new,
+// then delete old), so the name must differ from the one being replaced ("policies-s3").
+export const DATA_SOURCE_NAME = "policies-s3-hierarchical";
 
 // Explicit (not CloudFormation-generated) names so the CloudFormation execution policy can
 // grant S3 Vectors access on these two exact ARNs (infra/bootstrap/cfn-exec-policy.json).
@@ -143,18 +151,26 @@ export class KnowledgeBaseStack extends Stack {
     });
 
     const dataSource = new CfnDataSource(this, "DocsDataSource", {
-      name: "policies-s3",
+      name: DATA_SOURCE_NAME,
       knowledgeBaseId: knowledgeBase.attrKnowledgeBaseId,
+      // DELETE: when a data source is deleted (including the old one during a replacement),
+      // Bedrock also deletes its vectors from the shared index. RETAIN would leave the old
+      // fixed-size chunks in the index, where queries would keep returning them.
+      dataDeletionPolicy: "DELETE",
       dataSourceConfiguration: {
         type: "S3",
         s3Configuration: { bucketArn: docsBucket.bucketArn },
       },
       vectorIngestionConfiguration: {
         chunkingConfiguration: {
-          chunkingStrategy: "FIXED_SIZE",
-          fixedSizeChunkingConfiguration: {
-            maxTokens: CHUNK_MAX_TOKENS,
-            overlapPercentage: CHUNK_OVERLAP_PERCENT,
+          chunkingStrategy: "HIERARCHICAL",
+          hierarchicalChunkingConfiguration: {
+            // Exactly two levels, parent first (CloudFormation: LevelConfigurations min/max 2).
+            levelConfigurations: [
+              { maxTokens: PARENT_CHUNK_MAX_TOKENS },
+              { maxTokens: CHILD_CHUNK_MAX_TOKENS },
+            ],
+            overlapTokens: CHUNK_OVERLAP_TOKENS,
           },
         },
       },

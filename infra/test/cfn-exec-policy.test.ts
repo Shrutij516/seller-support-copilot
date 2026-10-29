@@ -174,6 +174,26 @@ describe("CloudFormation execution policy (bootstrap/cfn-exec-policy.json)", () 
     }
   });
 
+  test("covers replacing the data source (AWS::Bedrock::DataSource handler actions)", () => {
+    // Changing the chunking strategy replaces the data source: CloudFormation creates the new
+    // one, then deletes the old. Handler permissions from the published resource schema
+    // (create/read/update/delete), minus KMS (no customer-managed key is used).
+    const kbStatement = statements.find((s) => s.Sid === "KbStackKnowledgeBaseAndDataSource");
+    expect(kbStatement).toBeDefined();
+    expect(resourcesOf(kbStatement!)).toEqual([
+      `arn:aws:bedrock:us-east-1:${ACCOUNT_PLACEHOLDER}:knowledge-base/*`,
+    ]);
+    expect(actionsOf(kbStatement!)).toEqual(
+      expect.arrayContaining([
+        "bedrock:CreateDataSource",
+        "bedrock:GetDataSource",
+        "bedrock:UpdateDataSource",
+        "bedrock:DeleteDataSource",
+        "bedrock:GetKnowledgeBase",
+      ]),
+    );
+  });
+
   test("fits IAM's 6,144-character managed policy limit", () => {
     const compact = readFileSync(POLICY_PATH, "utf8").replace(/\s/g, "");
     expect(compact.length).toBeLessThanOrEqual(6144);

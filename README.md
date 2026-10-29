@@ -173,3 +173,16 @@ Other targets: `make down` (stop containers, keeps the Postgres volume), `make o
 | CI | 4 jobs (api, web, infra, api-image), about 1 minute 15 seconds per run |
 | Seed data | about 20 sellers, 60+ listings, 500 orders |
 
+### RAG chat (retrieval and answers)
+
+Measured on 2026-10-29 with live Amazon Bedrock calls: Knowledge Base retrieval with hierarchical chunking, answers from Claude Haiku 4.5 via the `us.` inference profile, `rag_min_score` 0.55.
+
+| Metric | Value |
+| --- | --- |
+| Retrieval hit@1 / hit@5, source-level | 95% / 100% (20 in-scope questions) |
+| Retrieval hit@1 / hit@5, fact-level (a retrieved chunk contains the expected fact) | 95% / 100% |
+| Answers, in-scope (expected fact stated and expected source cited) | 20/20 |
+| Answers, out-of-scope (refusal with zero citations) | 9/10. The one miss was a safe refusal worded outside the scorer's pattern. |
+| Cost per answer (estimate) | about $0.0022: Converse tokens at Bedrock on-demand Haiku 4.5 Geo pricing, excluding retrieval |
+
+Caveats: 30 questions (20 in-scope, 10 out-of-scope), written by the same author as the policy documents, so expect these numbers to be optimistic compared with real seller questions. Scoring is deterministic (key-term and citation checks, no LLM judge). Methodology, scoring rules, known limitations and the raw results files are in [evals/README.md](evals/README.md).

@@ -282,7 +282,31 @@ build; don't let it drift from the code.
   - **0.55 costs no real question.** It keeps 20/20 in-scope (lowest in-scope top score 0.584, in-19) and still skips the model entirely for the 4 clearly unrelated questions (out-01, -02, -03, -08, top scores 0.511–0.533).
 - Rejected alternative: 0.614, the calibration script's "keep ≥95% in-scope" value. It refuses 1 of 20 real questions (in-19, the paraphrased refurbished-laptop photo question at 0.584), and in this sample refuses exactly the same 4 out-of-scope questions as 0.55. So it costs a real answer and buys nothing. Also rejected: keeping 0.3, which lets every question through, including keyboard mash.
 - Tradeoff we accept: Most off-topic questions (6/10 here) still reach the model and rely on the prompt to decline. At about 2,000 input and 70 output tokens per question (answers eval: 60,756 / 2,056 tokens over 30 questions), each costs roughly $0.003 at Haiku 4.5's Geo on-demand price. That's an estimate, and abuse at volume is a rate-limiting problem, not a threshold one. The margin under the weakest real question is thin (0.584 vs 0.55), and 20 author-written questions is a small sample.
+- After hierarchical chunking (`retrieval-2026-10-29-04.json`): **kept at 0.55.** The lowest in-scope top score rose to 0.621 (from 0.584), so the margin under the weakest real question widened. Rejected: re-tuning the floor upward to the new numbers. On a 30-question, author-written set, chasing each run's minimum is overfitting, and the floor is a cost guard, not the refusal mechanism, so a little extra headroom costs nothing.
 - Revisit if: Real seller questions arrive (re-run the calibration on them), the embedding model or chunking changes, or the answer eval's out-of-scope refusals regress (the prompt is doing the work, so that's where to look first).
+
+## Hierarchical chunking
+
+- Status: In use. Deployed by the account owner and verified live (2026-10-29); results below.
+- What it does: `KnowledgeBaseStack`'s data source switches from FIXED_SIZE (300 tokens, 20% overlap) to HIERARCHICAL: parent `maxTokens` 1000, child `maxTokens` 150, `overlapTokens` 30. Bedrock embeds and matches the small child chunks. At retrieval it replaces each matched child with its parent chunk, so the model gets the surrounding section rather than a 300-token slice. Our policy docs are about 500–720 words (roughly 700–950 tokens), so a parent is close to a whole document.
+- Why we chose it: The fixed-size split regressed in-scope answers from 20/20 to 18/20 (see Incidents, "Fixed-size chunking split facts across chunks"). in-09 lost "returns the referral fee" to an unretrieved neighbor chunk, and in-15's fact-bearing intro chunk wasn't retrieved at all. Small children give precise matching (a 150-token chunk about "order defect rate" embeds close to that question), and the parent returns the whole fact with its context. That's the 20/20 behavior we had when files came back whole, without the oversized-embedding problem.
+- **AWS caveat, stated plainly:** the Bedrock chunking guide says "Hierarchical chunking is not recommended when using S3 vector bucket as your vector store. When using high number of tokens for chunking (over 8000 tokens combined), you may run into metadata size limitations." (https://docs.aws.amazon.com/bedrock/latest/userguide/kb-chunking.html#kb-hiearchical-chunking). The S3 Vectors docs explain that parent and child relationships and hierarchical context are stored as non-filterable metadata (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-vectors-bedrock-kb.html#s3-vectors-bedrock-kb-limits), and the limit is 40 KB total metadata per vector (2 KB filterable) (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-vectors-limitations.html). Our combined 1,150 tokens is about 14% of the 8,000-token warning level. A 1,000-token parent is roughly 4–5 KB of text, well under 40 KB. `AMAZON_BEDROCK_TEXT` and `AMAZON_BEDROCK_METADATA` are already non-filterable on the index. A Jest test keeps combined tokens at or below 2,000. If ingestion reports metadata-size failures, this is the first suspect.
+- Replacement behavior: `ChunkingStrategy` and `HierarchicalChunkingConfiguration` are "Update requires: Replacement" (https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-properties-bedrock-datasource-chunkingconfiguration.html, https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-properties-bedrock-datasource-hierarchicalchunkingconfiguration.html). CloudFormation creates the new data source, then deletes the old one (https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-bedrock-datasource.html). So:
+  - **Name:** renamed `policies-s3` → `policies-s3-hierarchical`, so the two can coexist during that window in the same KB. The logical ID stays `DocsDataSource`, so the `DataSourceId` output and `make kb-ingest` follow the new one.
+  - **`dataDeletionPolicy: DELETE`, set explicitly** (it's "No interruption" to change and is also the documented default). When the old data source is deleted, Bedrock deletes its vectors from the shared S3 Vectors index (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-vectors-bedrock-kb.html#s3-vectors-bedrock-kb-manage-sync). With RETAIN, the old 300-token chunks would stay in the same index and keep being returned alongside the new ones.
+  - **Consequence for the owner:** between the deploy finishing and `make kb-ingest` completing, the new data source has no vectors and the old ones are gone. Retrieval returns nothing, and chat answers fall back to the refusal. Run `make kb-ingest` right after the deploy.
+  - **Permissions:** the CloudFormation execution policy already allows Create, Get, Update and DeleteDataSource and GetKnowledgeBase on the KB ARN, which is everything the `AWS::Bedrock::DataSource` handlers need without KMS. A new Jest test pins that. Bedrock deletes the old vectors with the KB service role, which already has `s3vectors:DeleteVectors`.
+- Retrieval side effect: because child matches are replaced by their parents, and children of the same parent collapse into one result, Retrieve can return **fewer than `numberOfResults` (top_k=5)** chunks. The chunking guide says: "the returned number of results might be less than the requested amount". Nothing in the pipeline assumes exactly five. The retrieval eval's hit@5 now means "within whatever came back".
+- Rejected alternative: larger fixed chunks (e.g. 600–800 tokens). That fixes boundary splits by making chunks almost whole docs, but each embedding then mixes several topics again, the precision problem the table fix removed. Also rejected: semantic chunking. It costs a foundation-model call at ingest, its boundaries are opaque and can still split a fact from its qualifier, and it changes how every file is split in a way that's hard to reason about. Also rejected: pre-splitting docs by section into separate files with NONE chunking. Precise and fully under our control, but it makes the corpus layout an ingest artifact, multiplies files to maintain, and needs a tested splitter.
+- Tradeoff we accept: each retrieved result is a whole-document parent (~577–745 tokens) instead of a ~300-token chunk, and we accept AWS's "not recommended with S3 Vectors" caveat at a deliberately small token size. The entry originally predicted "roughly 2–3x the per-question cost"; measured input tokens actually went **down** (see results). That prediction was wrong; see the fixed-size incident's "What each reviewer missed".
+- Measured results (owner's live runs, exact output verified by the reviewer):
+  - **Deploy:** CloudFormation replaced the data source (the change set showed `Replacement=Conditional`). New data source `AUKZILCLZK` (`policies-s3-hierarchical`); old `NXNCY57HMT` is gone.
+  - **Old vectors purged** (`dataDeletionPolicy: DELETE` worked): grepping `list-vectors` metadata for `NXNCY57HMT` found 0 vectors; the positive control `AUKZILCLZK` found 36.
+  - **Ingest:** 6 documents indexed, 0 failed. No S3 Vectors metadata-limit failures.
+  - **Retrieval** (`evals/results/retrieval-2026-10-29-04.json`): source-level and fact-level hit@1 95%, hit@5 100%. No question had the right doc without a fact-bearing chunk. Lowest in-scope top score 0.621 (was 0.584). Every source returns exactly 1 distinct parent, ~577–745 tokens, i.e. the whole document. Retrieve returned 1–5 results per question, mean 2.57 (fewer than top_k, as documented).
+  - **Answers** (`evals/results/answers-2026-10-29-04.json`, `rag_min_score` 0.55): in-scope **20/20** (in-09 and in-15 fixed), out-of-scope 9/10. The one miss, out-07, is the known scorer limitation: a safe refusal with zero citations, worded outside the regex. Tokens: 51,606 input / 1,907 output, estimated $0.0673 for 30 questions (about $0.0022 per answer).
+- What this shows: every policy doc is under the 1,000-token parent size, so **parents are whole documents**. Here the benefit is precise child matching (a 150-token chunk embeds close to its question) plus whole-document context for the model, with no fact cut off at a boundary. With docs this short, that's close to "retrieve whole docs, ranked by their best paragraph". The advantage over fixed-size grows with longer docs, where a parent is one section rather than the whole file and fixed-size chunks would split more facts.
+- Revisit if: ingestion reports metadata-size errors, the answer eval doesn't recover in-09 and in-15, or the corpus grows enough that ~1,000-token parents stop being "about one section" (then revisit parent size or pre-splitting by section).
 
 ## Chat: request/response, not streaming
 
@@ -521,8 +545,13 @@ build; don't let it drift from the code.
 - Evidence: The two chunk excerpts above, from the account owner's inspection of the live Retrieve output for in-09 and in-15, and the failures listed in `answers-2026-10-29-03.json`. Before the tables were removed, the three table-containing docs were single whole-file chunks, so "right doc retrieved" implied "fact retrieved". That's why the earlier 20/20 didn't expose the gap.
 - Fix:
   - **Measurement (this branch):** `evals/calibrate_retrieval.py` now reports fact-level hit@1 and hit@5 alongside source-level hit. A chunk counts only if it comes from `expected_source` and itself contains every key term, using the same matcher as the answer eval (`evals/matching.py`). Questions where the right doc was retrieved but no top-5 chunk holds the fact are listed. Each chunk's first 120 characters are now saved, so boundary splits are visible in the results file.
-  - **Retrieval:** **pending** hierarchical chunking on the next branch (`feat/kb-hierarchical-chunking`): small child chunks for matching, larger parent chunks returned as context.
+  - **Retrieval:** hierarchical chunking (parent 1,000 / child 150 / overlap 30; see "Hierarchical chunking"), deployed and re-ingested by the account owner. **Verified:** answers in-scope 20/20 (in-09 and in-15 fixed), out-of-scope 9/10 (out-07, known scorer limitation); retrieval source and fact hit@1 95%, hit@5 100%; lowest in-scope top score 0.621 (`evals/results/answers-2026-10-29-04.json`, `retrieval-2026-10-29-04.json`).
   - **Caveat:** in-09's golden `key_terms` is just `["referral fee"]`. That phrase also appears in the fee-schedule chunk, so fact-level hit may still count in-09 as found. Tightening it (e.g. adding "returns|returned") would also change the answer eval's scoring, so it's left for a reviewed change.
+- What each reviewer missed:
+  - **Reviewer:** predicted that hierarchical chunking would raise answer-eval input tokens 2–3x, to about 80–110k.
+  - **Claude Code:** wrote the same "roughly 2–3x the per-question cost" into the "Hierarchical chunking" entry.
+
+  Actual: 51,606, down from 60,756 with fixed-size chunks. Retrieve deduplicates children into their parents, so a question gets about 2–3 whole docs (mean 2.57 results) instead of five ~300-token chunks, often several from the same doc. Both predictions assumed five results per question. They were wrong, and they're recorded here as wrong.
 - Lesson: Source-level hit@k masks passage-level misses once docs have more than one chunk. "The right document came back" isn't "the answer came back". Measure retrieval at the level the model consumes (the chunk), and re-check retrieval metrics whenever chunking changes, even when the change was a fix.
 
 ### 2026-10-29: Piped output masked a failed step in the &&-chained verify command
@@ -533,6 +562,158 @@ build; don't let it drift from the code.
 - Fix: Verify-and-commit chains now start with `set -o pipefail`. With Docker Hub unreachable, the integration tests ran against `docker compose up -d --wait postgres dynamodb-local` (cached images, no build). The tests use the in-process app, not the API container. Everything passed, and only then was the commit made.
 - Lesson: `&&` only guards what it can see. Piping to `tail` or `grep` hides exit codes unless `pipefail` is set. This extends the 4b lesson ("chain with &&") to "chain with && under pipefail".
 
+### 2026-10-29: A heredoc ended the && chain, so a failed step didn't stop a negative test
+
+- Symptom: While checking the execution policy for the hierarchical change, the first command in a chain failed (`FileNotFoundError` reading the scratchpad copy of the CloudFormation schema bundle, which no longer existed). The commands after it still ran, including a "negative test" that reported `DeleteDataSource REMOVED: Tests: 34 passed`. That looked like a failed negative test, but the test it was meant to exercise had never been added (the count was 34, not 35). No commit was made.
+- Root cause: A heredoc (`python3 - <<'EOF' ... EOF`) ends the shell line. Everything after the closing `EOF` is a new command, outside the preceding `&&` chain and outside `set -o pipefail`. The missing schema file was environmental: scratchpad files from earlier in the session were gone.
+- Evidence: The run's output showed the traceback followed by `Tests: 34 passed` (no "test added" line), then the meaningless negative result. On the rerun, the test count was 35 and the negative check failed as it should (`1 failed, 34 passed`).
+- Fix: Python helpers are written to files first; the checks then run as one `&&` chain on a single line under `set -o pipefail`. The negative-test script itself now asserts that something failed, so a vacuous pass is an error. The DataSource handler actions were taken from the schema output already recorded earlier in this session, so nothing was re-downloaded.
+- Lesson: An `&&` chain is only as long as its shell line. Heredocs, newlines and pipes without `pipefail` all silently end the protection. A negative test that can pass vacuously is worse than none: assert that the mutation actually produced a failure.
+
+### 2026-10-28: Reviewer proposed `${aws:PrincipalAccount}` in the account field of IAM ARNs
+
+- Symptom: The phase 4c-pre tightening request asked to replace every account wildcard (`::*:` / `:*:`) in `infra/bootstrap/cfn-exec-policy.json` with `${aws:PrincipalAccount}`.
+- Root cause: IAM policy variables are only allowed in the resource portion of an ARN, after the fifth colon. "You can't use a variable to replace parts of the ARN before the fifth colon, such as the service or account" (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_variables.html#policy-vars-wheretouse). A variable in the account field would not have been substituted, so those statements wouldn't have matched any resource.
+- Evidence: The IAM docs quote above, which Claude Code checked before editing, as the request itself asked.
+- Fix: The committed policy uses an `{{ACCOUNT_ID}}` placeholder. `make deploy-policy-create` and `deploy-policy-update` render the caller's account (validated as 12 digits) into a temp file at create time and refuse to continue if any placeholder remains. The account ID is never committed. Tests assert no account wildcard and a clean render.
+- What each reviewer missed:
+  - **Reviewer:** proposed policy-variable placement without checking IAM's rules. Claude Code caught it from the IAM docs.
+- Lesson: Check where IAM allows policy variables before proposing one.
+
+### 2026-10-29: Paraphrased results accepted as proof (twice)
+
+- Symptom: Twice, a summary of a command's output was accepted in place of the output itself:
+  - **"Both outputs expected"** for the access-key checks. This was later re-confirmed with real output, so it happened to be right.
+  - **"Model access ok"** for Bedrock model access. This was wrong: Converse still failed until the Anthropic use-case form was submitted (see "Converse failed until the Anthropic use-case form was submitted").
+- Root cause: The review step treated the account owner's paraphrase as evidence. A paraphrase can't show which command, model, region or profile ran, or what it returned.
+- Evidence: The later `ResourceNotFoundException` ("Model use case details have not been submitted"), which contradicted "model access ok". The access-key re-check did confirm the earlier summary.
+- Fix: Proof of an AWS call is now the exact command and its exact, unedited output. Later phases' live numbers were all "exact output verified".
+- What each reviewer missed:
+  - **Reviewer:** accepted paraphrased results as proof twice. One was wrong.
+- Lesson: Only exact pasted output counts as proof.
+
+### 2026-10-29: PRs #1–#5 approved on Claude Code's reported test counts
+
+- Symptom: The reviewer approved PRs #1–#5 based on the test counts and coverage Claude Code reported, without running the suite independently.
+- Root cause: The review relayed the author's claims instead of verifying them. The author's report and the reviewer's check were the same source.
+- Evidence: The account owner's record of the review process. PRs #1–#5 were approved on reported numbers. From PR #6 onward the reviewer ran lint, mypy, unit and integration tests itself, using local Postgres and moto instead of DynamoDB Local. CI remains the final word.
+- Fix: Independent local verification by the reviewer from PR #6 onward, plus CI on every PR.
+- What each reviewer missed:
+  - **Reviewer:** relayed reported results for five PRs instead of reproducing them.
+- Lesson: Verify, don't relay.
+
+### 2026-10-29: `aws bedrock-agent-runtime retrieve` failed on a query containing commas
+
+- Symptom: The reviewer's `aws bedrock-agent-runtime retrieve --retrieval-query text="...,..."` failed when the query text contained a comma.
+- Root cause: AWS CLI shorthand syntax splits values on commas, so free text with a comma isn't passed as one string.
+- Evidence: The account owner's record: the shorthand form failed, and the JSON form worked.
+- Fix: Pass the parameter as JSON: `--retrieval-query '{"text":"..."}'`.
+- Lesson: Use JSON parameters for free text in the AWS CLI. Shorthand is for simple scalar values.
+
+### 2026-10-29: An eval run overwrote the committed baseline answers file
+
+- Symptom: Rerunning `make eval-answers` the same day overwrote the committed baseline `evals/results/answers-2026-10-29.json` locally with the new run.
+- Root cause: The eval scripts named results by date only and wrote with plain `write_text`, so a second run on the same day replaced the first.
+- Evidence: The local file's `run_at` and summary (8/10 out-of-scope) differed from the committed baseline (7/10). It was recovered with `git checkout --`, and the new run was saved separately as `answers-2026-10-29-02.json`.
+- Fix (already done in phase 4c): both scripts write through `write_new_results`. The first run of a day is `<kind>-<date>.json`, later runs are `-02`, `-03` and so on, opened with exclusive create, so an existing file can never be replaced. Unit tests cover it.
+- Lesson: Results are evidence. Make them append-only.
+
+### 2026-10-29: PR #3's description misstates the Jest split
+
+- Symptom: PR #3 (KnowledgeBaseStack) says Jest ran "16/16 pass, 11 of them new", and Claude Code's phase 4b report said "11 new + 5 existing". The actual split was 10 new KB-stack tests and 6 existing budget tests. The total of 16 was correct.
+- Root cause: The split was written from memory rather than counted from the test files.
+- Evidence: `grep -c '^  test(' infra/test/*.test.ts` at the time gave 10 in the KB suite and 6 in the budget suite. Claude Code found the discrepancy in phase 4c-pre and said so in its report.
+- Fix: Recorded here. PR #3 is merged, so its description still says "11 new". This entry is the correction of record.
+- Lesson: Count, don't recall. Test-count claims in a PR description should come from the test run's output.
+
+### 2026-10-29: Evidence-capture gaps during the hierarchical-chunking deploy
+
+- Symptom: Two evidence problems during the deploy:
+  - **Truncated `cdk diff`:** the output file was attached before the command finished, so it was cut off and had to be re-run.
+  - **Skipped pre-ingest check:** the vector-count check that should have run before ingest was skipped.
+- Root cause: Commands were treated as finished before the prompt returned and the exit code was checked, and the checks weren't run in the order they were stated.
+- Evidence: The account owner's record of the truncated diff file and its complete re-run. The missing pre-ingest check was proven afterward instead: a per-data-source metadata grep of `list-vectors` found 0 vectors for the old data source `NXNCY57HMT` and 36 for the new `AUKZILCLZK`, the positive control showing the grep works.
+- Fix: The diff was re-run to completion. The purge was demonstrated with the per-data-source grep and its positive control.
+- Lesson: Wait for the prompt and exit code before capturing output, and run checks in the stated order. A check proven after the fact needs a positive control to mean anything.
+
+### 2026-10-29: `git checkout main` run outside the repo
+
+- Symptom: The account owner ran `git checkout main` from the home directory and got `fatal: not a git repository`.
+- Root cause: The command block assumed the shell was already in the repo. The new terminal started in `~`.
+- Evidence: The `fatal: not a git repository` error.
+- Fix: `cd` to the repo first, with the path quoted because it contains a space: `cd "/Users/.../NEW PROJECTS/seller-support-copilot"`.
+- Lesson: Every command block starts with the `cd`.
+
+### 2026-10-29: Duplicate pull request attempts from GitHub's "Compare & pull request" banner
+
+- Symptom: For PR #2, clicking GitHub's "Compare & pull request" banner gave "Pull request creation failed: A pull request already exists". Claude Code had already opened the PR. The same near-miss happened later for `feat/kb-hierarchical-chunking`; that time the form was closed without creating anything.
+- Root cause: GitHub shows the banner for any recently pushed branch, whether or not a PR exists, and two people were acting on the same branch.
+- Evidence: The GitHub error message for PR #2, and the account owner's record of the later near-miss.
+- Fix: No duplicate was created either time.
+- Lesson: Open PRs only through the PR link Claude Code reports. Ignore the push banner.
+
+### 2026-10-29: Claude Code path slip in phase 4c (`..` instead of `../..`)
+
+- Symptom: A help-check of the new eval scripts failed with "can't open file" because the path was wrong.
+- Root cause: From `services/api`, the repo root is `../..`, not `..`. Claude Code used `..`.
+- Evidence: The "No such file or directory" error for `services/api/../evals/calibrate_retrieval.py`.
+- Fix: Caught on the rerun, which used `../..` (or ran from the repo root). No files were affected.
+- Recurrence: it happened again while committing this entry. A chain used `cd ../infra` from `services/api` (`no such file or directory: ../infra`). The `&&` chain stopped before the commit, and the rerun used the absolute repo path.
+- Lesson: Use paths relative to the repo root, or absolute paths, in commands run from subdirectories. Prefer one absolute `cd` per step over chained relative ones.
+
+### 2026-10-29: Claude Code passed two revisions to `git rev-parse --short` during the rebase
+
+- Symptom: While rebasing `feat/kb-hierarchical-chunking`, a chain stopped with `fatal: Needed a single revision`.
+- Root cause: `git rev-parse --short` accepts only one revision, and Claude Code passed two (`HEAD` and `origin/feat/kb-hierarchical-chunking`).
+- Evidence: The error output. The `&&` chain stopped before `git rebase`, so nothing changed.
+- Fix: Printed each revision separately, then rebased.
+- Lesson: The chain did its job. Check a command's argument rules before putting it at the front of a chain.
+
+### 2026-10-29: Docker Hub unreachable during local verification
+
+- Symptom: `make up` failed while building the API image: `failed to solve: DeadlineExceeded: context deadline exceeded`, resolving `docker.io/docker/dockerfile:1`. This happened in the same session as "Piped output masked a failed step".
+- Root cause: The local machine couldn't reach Docker Hub. This was environmental, not a repo or Dockerfile fault.
+- Evidence: The BuildKit error when resolving the image config for the Dockerfile frontend.
+- Fix: The integration tests don't use the API container; they run the app in-process. So they ran against `docker compose up -d --wait postgres dynamodb-local`, using cached images. CI builds the API image on its own runners.
+- Lesson: Know which services a test run actually needs, so a registry outage doesn't block verification. Say plainly when local runs used a reduced stack.
+
+### 2026-10-29: Reviewer's local test services stopped between sessions
+
+- Symptom: The reviewer's independent run showed 91 integration "errors".
+- Root cause: The reviewer's own verification environment, local Postgres and a DynamoDB emulator, had stopped between sessions. Not a code fault.
+- Evidence: The account owner's record of the reviewer's run: 91 integration errors, which cleared once the services were restarted.
+- Fix: Restarted the reviewer's test services. The suite then passed.
+- Lesson: Start and health-check the test dependencies before trusting a test count. Logged so the reviewer's numbers can be reproduced.
+
+### 2026-10-29: AWS session expired overnight
+
+- Symptom: AWS CLI calls failed with "Your session has expired".
+- Root cause: The `aws login` session uses short-lived credentials, and they expire. This is expected behavior.
+- Evidence: The CLI's session-expired message.
+- Fix: Ran `aws login` again.
+- Lesson: Expect to re-authenticate at the start of a working session. Logged for completeness.
+
+### 2026-10-29: Secret scan reported "clean" because its regex was rejected
+
+- Symptom: Claude Code's first scan of the `-04` results files reported no account IDs, keys or ARNs. But one of its `grep -E` patterns used `(?i:...)`, which grep's extended regex doesn't support. grep rejected the pattern, matched nothing, and the `! grep ...` check read that as "clean".
+- Root cause: The scan treated "no matches" as proof of absence without first showing it could find anything. A rejected pattern, a wrong path and a working scan of a clean file all look the same.
+- Evidence: The original command contained `(?i:secret_access|session_token)` inside `grep -Eq`. Claude Code noticed the unsupported syntax before relying on the result and re-scanned in Python.
+- Fix: Re-scanned in Python. Then, retroactively, every committed `evals/results/*.json` file plus `DECISIONS.md` and `README.md` was re-scanned with a Python scanner, after a **planted-positive control**. The control was a scratch file (never committed) containing the real account ID, a fake 12-digit account, a fake AKIA key, a secret-key-shaped value, a credential word, a private-key header, an email address and an ARN with an account. All 8 patterns fired on it, and the scanner exited 1. The real scan then found:
+  - all 8 results files clean
+  - `DECISIONS.md`: 2 "credential words" hits, both the environment-variable *names* `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` in the hermetic-tests docs, not values
+  - `README.md`: 2 "email" hits, both the placeholder `you@example.com` in example CDK commands
+
+  No account ID, 12-digit number, access key, secret value, private key or account-bearing ARN in any of them.
+- Lesson: A scan must prove it can find a planted positive before its "no matches" counts. Run it on a file containing a fake account ID first. Prefer one scanner implementation (Python `re`) over shell regex dialects.
+
+### 2026-10-29: Claude Code asserted what the reviewer's 91 integration errors were, without seeing them
+
+- Symptom: While logging "Reviewer's local test services stopped between sessions", Claude Code first wrote that all 91 errors were connection or setup failures.
+- Root cause: Claude Code filled in a plausible detail it hadn't observed. All it had was the account owner's statement that there were 91 errors and that they cleared after a restart.
+- Evidence: The first draft of that entry's Evidence line. It was caught before the commit, and the committed text says "The account owner's record of the reviewer's run: 91 integration errors, which cleared once the services were restarted."
+- Fix: Restated as the reviewer's record. The same check was applied to the other entries built from the owner's account (PR #1–#5 reviews, the CLI comma failure, the truncated `cdk diff`), and their Evidence lines say whose record they are.
+- Lesson: Evidence lines state only what was observed, and say who observed it. Don't upgrade a report into a finding.
+
 ### 2026-10-29: grep hit a regex complexity limit while scanning README.md
 
 - Symptom: During the secret scan behind commit `49a7d46` (on `feat/kb-hierarchical-chunking`), the grep used to show email-hit context in `README.md` failed with `ugrep: error: ... exceeds complexity limits`.
@@ -541,9 +722,42 @@ build; don't let it drift from the code.
 - Fix: Switched that check to Python `re`. The retroactive scan then used one Python scanner, with a planted-positive control, for every file.
 - Lesson: Use one scanner implementation (Python) for all files, so behavior and limits are the same everywhere and a failure can't masquerade as a result.
 
+### 2026-10-29: PR #8 merged from GitHub's push banner ahead of PR #7
+
+- Symptom: `main` moved to `23babc9` ("Merge pull request #8 from Shrutij516/feat/web-chat-send") while PR #7 (`feat/kb-hierarchical-chunking`, head `49a7d46`) was still open. GitHub then reported PR #7 as CONFLICTING.
+- Root cause: An operator sequencing slip, in two steps:
+  1. The phase 5a prompt said to paste it only after PR #7 merged, but it was pasted before. So `feat/web-chat-send` was cut from `cf8d634`, without PR #7's DECISIONS.md changes.
+  2. The account owner then opened PR #8 from GitHub's "Compare & pull request" push banner and merged it. The phase 5a instructions said "No PR", and Claude Code didn't open one.
+
+  Both branches appended to the end of DECISIONS.md, hence the conflict.
+- Evidence: `git log origin/main` shows `23babc9` (PR #8) on top of `9ba09ad`. `gh pr view 8`: author and merger Shrutij516, created 16:35:59Z, merged 16:38:04Z. `gh pr view 7`: OPEN, mergeable CONFLICTING, head `49a7d46`, none of its commits in `main`.
+- Fix: Merged `origin/main` into `feat/kb-hierarchical-chunking` with a merge commit (no rebase, because PR #7 is open; no force-push). DECISIONS.md was resolved by keeping both sides, with one "Known open issues" list holding every item from both branches.
+- Lesson: Confirm `main`'s head commit before starting a phase, and only merge the PR number the reviewer names. Ignore GitHub's "Compare & pull request" banner; it appears for any pushed branch, whether or not that branch is meant to become a PR.
+
+### 2026-10-29: Live KB data source deployed from an unmerged branch (infra drift)
+
+- Symptom: The live Knowledge Base data source is `AUKZILCLZK` (`policies-s3-hierarchical`, HIERARCHICAL chunking), but `main`'s `infra/lib/knowledge-base-stack.ts` still defined `policies-s3` with FIXED_SIZE chunking. The account and `main` disagreed.
+- Root cause: The hierarchical change was deployed (`cdk deploy`) from `feat/kb-hierarchical-chunking` while its PR (#7) was still open, and the PR didn't merge right after. Anyone deploying `KnowledgeBaseStack` from `main` in that window would have replaced the hierarchical data source back with a fixed-size one, re-introducing the 18/20 regression and purging the live vectors (`dataDeletionPolicy: DELETE`).
+- Evidence: The deploy output (new data source `AUKZILCLZK`, old `NXNCY57HMT` gone), recorded in "Hierarchical chunking". `main`'s `knowledge-base-stack.ts` at `23babc9` still had `chunkingStrategy: "FIXED_SIZE"` and `name: "policies-s3"`.
+- Fix: PR #7 carries the infra change. Merging it brings `main` back in line with the account. Until then, nobody deploys `KnowledgeBaseStack` from `main`.
+- Lesson: Merge an infra PR before, or right after, the deploy it describes. Never deploy from a branch that might not merge.
+
+### 2026-10-29: Retry after a 503 duplicates the user's question (open bug, now on `main`)
+
+- Symptom: In the web chat (merged in PR #8), if a send fails with 503 and the user presses Retry, the session ends up with the question stored twice: once with no answer, once answered.
+- Root cause: The API stores the user's message before calling Bedrock, deliberately, so the thread shows what was asked even when answering fails. Retry sends a new POST, which stores the question again. Nothing ties the retry to the first attempt.
+- Evidence: Found in review of phase 5a, and acknowledged in "Chat: request/response, not streaming" (tradeoff: "the thread can show the same question twice"). The web test "on 503 keeps the typed question and Retry resends it" asserts two POSTs with the same text, and its fake server stores the question on each.
+- Fix: **Pending**, on the next branch after PR #7 merges: an idempotency key (`client_message_id`) per question, reused on Retry, with the server storing the user message at most once per (session, key).
+- Lesson: When the server persists before a fallible step, a client retry needs an idempotency key from day one. "Rare" isn't the same as "harmless".
+
 ## Known open issues
 
-Not yet fixed. Each needs its own reviewed phase.
+Not yet fixed. Each needs a decision or a change in its own reviewed phase.
 
+- **Budget amount mismatch:** `infra/cdk.json` sets `budgetAmount` to 25, but the live AWS budget was created by hand at $15. The code and the account disagree. Either update `cdk.json` or deploy `BudgetStack` so they match.
+- **`npm audit` findings:** 8 vulnerabilities in `infra` dev dependencies, 1 of them critical. Not yet triaged: check whether any are reachable (they're dev and synth tooling, not deployed code) and upgrade or document each.
+- **Budget alert email:** budget alerts go to a different email address than the GitHub and Claude account. The owner needs to confirm whether that's intentional.
+- **Stale README:** the README's general Results table and layout rows are out of date. They say 83 backend tests and 90% coverage, `evals` is "placeholder", and `infra` is "`BudgetStack` only". Only the RAG Results subsection is current.
+- **PR #3's description is wrong:** it still says "16/16 pass, 11 of them new"; the actual split was 10 new and 6 existing. PR #3 is merged; the correction of record is in Incidents, "PR #3's description misstates the Jest split".
 - **Nobody can log in yet:** the Cognito User Pool isn't deployed. The web app's sign-in (`oidc-client-ts`) and the API's JWT verification are implemented and tested against minted tokens, but no real user pool exists. The chat page, like every authenticated page, can't be used end to end until Cognito is provisioned and `COGNITO_*` / `NEXT_PUBLIC_*` are configured.
-
+- **Retry after 503 duplicates the question:** a known bug on `main` since PR #8. See Incidents, "Retry after a 503 duplicates the user's question". The fix (an idempotency key) goes on a fresh branch after PR #7 merges.

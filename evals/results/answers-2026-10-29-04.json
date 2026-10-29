@@ -1,0 +1,815 @@
+{
+  "run_at": "2026-10-29T15:14:32.675029+00:00",
+  "knowledge_base_id": "LP3DBFHA5R",
+  "region": "us-east-1",
+  "model_id": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+  "rag_min_score": 0.55,
+  "top_k": 5,
+  "max_tokens": 1024,
+  "golden_file": "retrieval_golden.jsonl",
+  "refusal_pattern": "\\b(i (?:don't|do not) know|(?:couldn't|could not|can't|cannot|can not) find|(?:can't|cannot|can not|am unable to|i'm unable to) answer|(?:don't|do not) (?:have|contain|include|cover) (?:any )?(?:information|details)|(?:no|not enough) information|(?:isn't|is not|aren't|are not|not) (?:covered|mentioned|addressed|included|described)|(?:doesn't|does not|don't|do not) (?:cover|mention|address|include|describe))\\b",
+  "summary": {
+    "in_scope": {
+      "passed": 20,
+      "total": 20
+    },
+    "out_of_scope": {
+      "passed": 9,
+      "total": 10
+    },
+    "by_slice": {
+      "in:direct": {
+        "passed": 12,
+        "total": 12
+      },
+      "in:paraphrase": {
+        "passed": 8,
+        "total": 8
+      },
+      "out:general-knowledge": {
+        "passed": 3,
+        "total": 3
+      },
+      "out:lookalike": {
+        "passed": 2,
+        "total": 2
+      },
+      "out:nonsense": {
+        "passed": 1,
+        "total": 2
+      },
+      "out:other-platform": {
+        "passed": 3,
+        "total": 3
+      }
+    },
+    "failures": [
+      "out-07"
+    ],
+    "input_tokens": 51606,
+    "output_tokens": 1907,
+    "estimated_cost_usd": 0.067255,
+    "pricing_source": "https://aws.amazon.com/bedrock/pricing/ (Anthropic, On-Demand, Geo and In-region Cross-region Inference, US East (N. Virginia), Claude 4.5 Haiku; viewed 2026-10-29)"
+  },
+  "results": [
+    {
+      "id": "in-01",
+      "slice": "direct",
+      "in_scope": true,
+      "question": "How many days does a buyer have to request a refund?",
+      "expected_source": "returns-and-refunds.md",
+      "answer": "A buyer can request a refund within **30 days** of the order's delivery date [1]. The refund window starts at delivery, not at purchase, since transit time varies by carrier and destination.",
+      "refused_without_model": false,
+      "citations": [
+        {
+          "index": 1,
+          "source": "returns-and-refunds.md"
+        }
+      ],
+      "kept_sources": [
+        "returns-and-refunds.md",
+        "disputes.md",
+        "fees.md"
+      ],
+      "passed": true,
+      "reasons": [],
+      "input_tokens": 2369,
+      "output_tokens": 46,
+      "timings_ms": {
+        "retrieve": 456.3778330002606,
+        "generate": 1072.0272079997812
+      }
+    },
+    {
+      "id": "in-02",
+      "slice": "paraphrase",
+      "in_scope": true,
+      "question": "A customer's package is still in transit. Can they open a refund request yet?",
+      "expected_source": "returns-and-refunds.md",
+      "answer": "No. According to the policy, a buyer cannot open a refund request while an order is still in transit. [1] states: \"Orders that are still pending, shipped, or in transit cannot have a refund requested against them; the buyer should wait for delivery or contact the seller about a delayed shipment instead.\"\n\nA refund request can only be opened after the order is marked as delivered. [1]",
+      "refused_without_model": false,
+      "citations": [
+        {
+          "index": 1,
+          "source": "returns-and-refunds.md"
+        }
+      ],
+      "kept_sources": [
+        "returns-and-refunds.md",
+        "shipping-and-delivery-slas.md",
+        "disputes.md"
+      ],
+      "passed": true,
+      "reasons": [],
+      "input_tokens": 2450,
+      "output_tokens": 89,
+      "timings_ms": {
+        "retrieve": 462.8348329997607,
+        "generate": 1328.7501250001696
+      }
+    },
+    {
+      "id": "in-03",
+      "slice": "direct",
+      "in_scope": true,
+      "question": "How long do I have to respond to a refund request before it escalates?",
+      "expected_source": "returns-and-refunds.md",
+      "answer": "You have **3 business days** to respond to a refund request [1]. If you do not respond within 5 business days, the request auto-escalates to Kestrel Market's support team, who will review the order and issue a decision on your behalf [1].",
+      "refused_without_model": false,
+      "citations": [
+        {
+          "index": 1,
+          "source": "returns-and-refunds.md"
+        }
+      ],
+      "kept_sources": [
+        "returns-and-refunds.md",
+        "disputes.md",
+        "fees.md"
+      ],
+      "passed": true,
+      "reasons": [],
+      "input_tokens": 2373,
+      "output_tokens": 64,
+      "timings_ms": {
+        "retrieve": 411.40337500019086,
+        "generate": 834.1414169999553
+      }
+    },
+    {
+      "id": "in-04",
+      "slice": "paraphrase",
+      "in_scope": true,
+      "question": "Can I make the buyer pay return postage for an item that showed up broken?",
+      "expected_source": "returns-and-refunds.md",
+      "answer": "No. [1] states: \"Requiring a buyer to pay for return shipping on an item that arrived damaged or misdescribed is not permitted.\"\n\nIf a buyer's item arrives damaged, you cannot require them to cover return shipping costs.",
+      "refused_without_model": false,
+      "citations": [
+        {
+          "index": 1,
+          "source": "returns-and-refunds.md"
+        }
+      ],
+      "kept_sources": [
+        "returns-and-refunds.md",
+        "shipping-and-delivery-slas.md",
+        "disputes.md"
+      ],
+      "passed": true,
+      "reasons": [],
+      "input_tokens": 2449,
+      "output_tokens": 54,
+      "timings_ms": {
+        "retrieve": 503.90850000030696,
+        "generate": 1015.3247089997421
+      }
+    },
+    {
+      "id": "in-05",
+      "slice": "direct",
+      "in_scope": true,
+      "question": "Can a buyer have two refund requests open on the same order?",
+      "expected_source": "returns-and-refunds.md",
+      "answer": "No. According to the policy, \"Only one open refund request is allowed per order at a time. If a request is resolved (approved, denied, or withdrawn), a new request can be opened for the same order, but two requests cannot be active simultaneously.\" [1]",
+      "refused_without_model": false,
+      "citations": [
+        {
+          "index": 1,
+          "source": "returns-and-refunds.md"
+        }
+      ],
+      "kept_sources": [
+        "returns-and-refunds.md",
+        "disputes.md"
+      ],
+      "passed": true,
+      "reasons": [],
+      "input_tokens": 1698,
+      "output_tokens": 60,
+      "timings_ms": {
+        "retrieve": 413.55220800005554,
+        "generate": 1122.0042079999075
+      }
+    },
+    {
+      "id": "in-06",
+      "slice": "direct",
+      "in_scope": true,
+      "question": "What is the referral fee for electronics?",
+      "expected_source": "fees.md",
+      "answer": "The referral fee for electronics is 8% of the item's sale price (not including shipping charged to the buyer) [1]. However, there is a minimum referral fee of $0.30 per item, so very low-priced items under roughly $2.50 are charged $0.30 instead [1].",
+      "refused_without_model": false,
+      "citations": [
+        {
+          "index": 1,
+          "source": "fees.md"
+        }
+      ],
+      "kept_sources": [
+        "fees.md"
+      ],
+      "passed": true,
+      "reasons": [],
+      "input_tokens": 860,
+      "output_tokens": 74,
+      "timings_ms": {
+        "retrieve": 409.5269169997664,
+        "generate": 1442.6406669999778
+      }
+    },
+    {
+      "id": "in-07",
+      "slice": "paraphrase",
+      "in_scope": true,
+      "question": "Is the Pro plan worth it if I sell about 100 items a month?",
+      "expected_source": "fees.md",
+      "answer": "I can't answer that based on the marketplace policies provided. The context explains the Pro plan costs $34.99/month with no per-item charge, versus the Standard plan's $0.35 per item sold [1], but it doesn't contain information about what would be \"worth it\" for your business\u2014that depends on your profit margins, which aren't covered in these policies.\n\nWhat I can tell you: at 100 items/month, the Standard plan would cost $35 in per-item fees alone, which is slightly more than the $34.99 Pro plan flat fee [1]. So mathematically, the Pro plan would save you money at that volume. But whether it's worth it overall depends on factors outside these policies.",
+      "refused_without_model": false,
+      "citations": [
+        {
+          "index": 1,
+          "source": "fees.md"
+        }
+      ],
+      "kept_sources": [
+        "fees.md",
+        "account-health.md",
+        "listing-rules-and-prohibited-items.md"
+      ],
+      "passed": true,
+      "reasons": [],
+      "input_tokens": 2254,
+      "output_tokens": 161,
+      "timings_ms": {
+        "retrieve": 328.3734589999767,
+        "generate": 1996.4162080000278
+      }
+    },
+    {
+      "id": "in-08",
+      "slice": "direct",
+      "in_scope": true,
+      "question": "How much does warehouse storage cost in November?",
+      "expected_source": "fees.md",
+      "answer": "Based on the context provided, warehouse storage in November costs **$2.40 per cubic foot** [1].\n\nNovember falls within the October through December period, when storage fees rise to reflect peak-season warehouse demand [1].",
+      "refused_without_model": false,
+      "citations": [
+        {
+          "index": 1,
+          "source": "fees.md"
+        }
+      ],
+      "kept_sources": [
+        "fees.md",
+        "account-health.md"
+      ],
+      "passed": true,
+      "reasons": [],
+      "input_tokens": 1530,
+      "output_tokens": 51,
+      "timings_ms": {
+        "retrieve": 364.1975000000457,
+        "generate": 1051.2391669999488
+      }
+    },
+    {
+      "id": "in-09",
+      "slice": "paraphrase",
+      "in_scope": true,
+      "question": "When an order gets refunded, do I get my commission back?",
+      "expected_source": "fees.md",
+      "answer": "Yes, but only partially. When an order is refunded, Kestrel Market returns the **referral fee** (commission) for that item to you, since no completed sale occurred [2].\n\nHowever, the **per-item fee** (if you're on the Standard plan) is not refunded, as it covers listing and transaction processing costs already incurred. Similarly, fulfillment and storage fees already charged are also not refunded, since those services were already performed [2].",
+      "refused_without_model": false,
+      "citations": [
+        {
+          "index": 2,
+          "source": "fees.md"
+        }
+      ],
+      "kept_sources": [
+        "returns-and-refunds.md",
+        "fees.md",
+        "disputes.md"
+      ],
+      "passed": true,
+      "reasons": [],
+      "input_tokens": 2370,
+      "output_tokens": 106,
+      "timings_ms": {
+        "retrieve": 360.99579199981235,
+        "generate": 1418.886707999718
+      }
+    },
+    {
+      "id": "in-10",
+      "slice": "direct",
+      "in_scope": true,
+      "question": "How often are payouts issued?",
+      "expected_source": "fees.md",
+      "answer": "Payouts are issued every 14 days by default [1]. Sellers in good Account Health standing for at least 90 days can request a switch to a 7-day payout cycle through the Seller Portal [1].",
+      "refused_without_model": false,
+      "citations": [
+        {
+          "index": 1,
+          "source": "fees.md"
+        }
+      ],
+      "kept_sources": [
+        "fees.md",
+        "returns-and-refunds.md",
+        "shipping-and-delivery-slas.md"
+      ],
+      "passed": true,
+      "reasons": [],
+      "input_tokens": 2387,
+      "output_tokens": 53,
+      "timings_ms": {
+        "retrieve": 382.2070419996635,
+        "generate": 1051.7939580004168
+      }
+    },
+    {
+      "id": "in-11",
+      "slice": "direct",
+      "in_scope": true,
+      "question": "What is the delivery SLA for expedited shipping?",
+      "expected_source": "shipping-and-delivery-slas.md",
+      "answer": "The delivery SLA for expedited shipping is **2-3 business days from the ship date** [1].",
+      "refused_without_model": false,
+      "citations": [
+        {
+          "index": 1,
+          "source": "shipping-and-delivery-slas.md"
+        }
+      ],
+      "kept_sources": [
+        "shipping-and-delivery-slas.md",
+        "account-health.md"
+      ],
+      "passed": true,
+      "reasons": [],
+      "input_tokens": 1608,
+      "output_tokens": 27,
+      "timings_ms": {
+        "retrieve": 342.5331250000454,
+        "generate": 678.9462910001021
+      }
+    },
+    {
+      "id": "in-12",
+      "slice": "paraphrase",
+      "in_scope": true,
+      "question": "After how long without a tracking update is a package treated as lost?",
+      "expected_source": "shipping-and-delivery-slas.md",
+      "answer": "According to the policy, a package is considered lost in transit if tracking shows no movement for **10 consecutive days** and the package has not reached its destination [1].",
+      "refused_without_model": false,
+      "citations": [
+        {
+          "index": 1,
+          "source": "shipping-and-delivery-slas.md"
+        }
+      ],
+      "kept_sources": [
+        "shipping-and-delivery-slas.md",
+        "returns-and-refunds.md",
+        "listing-rules-and-prohibited-items.md"
+      ],
+      "passed": true,
+      "reasons": [],
+      "input_tokens": 2438,
+      "output_tokens": 38,
+      "timings_ms": {
+        "retrieve": 377.58441699998,
+        "generate": 850.9676660000878
+      }
+    },
+    {
+      "id": "in-13",
+      "slice": "direct",
+      "in_scope": true,
+      "question": "Do I need tracking on every shipment?",
+      "expected_source": "shipping-and-delivery-slas.md",
+      "answer": "No, not on every shipment. You must include valid, scannable tracking only on orders over $20 in value [1]. \n\nHowever, be aware that orders shipped without tracking that a buyer disputes as \"not received\" are resolved in the buyer's favor by default, since there is no way to verify delivery [1].",
+      "refused_without_model": false,
+      "citations": [
+        {
+          "index": 1,
+          "source": "shipping-and-delivery-slas.md"
+        }
+      ],
+      "kept_sources": [
+        "shipping-and-delivery-slas.md",
+        "returns-and-refunds.md"
+      ],
+      "passed": true,
+      "reasons": [],
+      "input_tokens": 1717,
+      "output_tokens": 72,
+      "timings_ms": {
+        "retrieve": 513.6241250002058,
+        "generate": 1263.7801669998225
+      }
+    },
+    {
+      "id": "in-14",
+      "slice": "paraphrase",
+      "in_scope": true,
+      "question": "I picked the 1-2 day handling tier but I keep shipping late. When does that become a problem?",
+      "expected_source": "shipping-and-delivery-slas.md",
+      "answer": "Shipping late on more than **5%** of your orders in a rolling 30-day window triggers a handling-time warning in your Account Health [1].\n\nAdditionally, if your on-time handling rate falls below 90% for two consecutive weeks, you'll receive a performance notice, and sustained failure can result in shipping-speed badges being removed from your listings until performance recovers [1].",
+      "refused_without_model": false,
+      "citations": [
+        {
+          "index": 1,
+          "source": "shipping-and-delivery-slas.md"
+        }
+      ],
+      "kept_sources": [
+        "shipping-and-delivery-slas.md"
+      ],
+      "passed": true,
+      "reasons": [],
+      "input_tokens": 951,
+      "output_tokens": 86,
+      "timings_ms": {
+        "retrieve": 379.0799580001476,
+        "generate": 1120.232791000035
+      }
+    },
+    {
+      "id": "in-15",
+      "slice": "direct",
+      "in_scope": true,
+      "question": "What order defect rate do I need to stay under?",
+      "expected_source": "account-health.md",
+      "answer": "You need to stay under **1%** order defect rate [1]. \n\nThis is measured as the share of orders resulting in a valid buyer complaint, an unresolved refund request, or a payment dispute, and it makes up 40% of your Account Health score [1].",
+      "refused_without_model": false,
+      "citations": [
+        {
+          "index": 1,
+          "source": "account-health.md"
+        }
+      ],
+      "kept_sources": [
+        "account-health.md",
+        "disputes.md",
+        "shipping-and-delivery-slas.md"
+      ],
+      "passed": true,
+      "reasons": [],
+      "input_tokens": 2333,
+      "output_tokens": 64,
+      "timings_ms": {
+        "retrieve": 364.61804200007464,
+        "generate": 1888.602875000288
+      }
+    },
+    {
+      "id": "in-16",
+      "slice": "paraphrase",
+      "in_scope": true,
+      "question": "My health score dropped to 62. What happens now?",
+      "expected_source": "account-health.md",
+      "answer": "Your score of 62 puts you in the \"At risk\" band (50-69) [1]. Here's what happens:\n\n1. **You'll receive a notice** explaining which factors are driving the drop [1]\n\n2. **You have 14 days** to submit a written improvement plan through the Seller Portal [1]\n\n3. **Your selling privileges continue** during this period\u2014you can keep selling [1]\n\n4. **If your score doesn't improve within 60 days** of your plan being accepted, your account moves to suspension review [1]\n\nI'd recommend acting quickly to identify the issues (likely related to order defect rate, on-time delivery, policy violations, or response time [1]) and submit a strong improvement plan.",
+      "refused_without_model": false,
+      "citations": [
+        {
+          "index": 1,
+          "source": "account-health.md"
+        }
+      ],
+      "kept_sources": [
+        "account-health.md"
+      ],
+      "passed": true,
+      "reasons": [],
+      "input_tokens": 861,
+      "output_tokens": 167,
+      "timings_ms": {
+        "retrieve": 370.48162499968385,
+        "generate": 1370.0924589998067
+      }
+    },
+    {
+      "id": "in-17",
+      "slice": "direct",
+      "in_scope": true,
+      "question": "How long do I have to appeal a suspension?",
+      "expected_source": "account-health.md",
+      "answer": "You have **30 days** from the date of the suspension decision to appeal [1]. \n\nTo appeal, you submit evidence through the Seller Portal, and your appeal will be reviewed by a different Trust and Safety reviewer than the one who made the original decision. There is no fee to appeal [1].",
+      "refused_without_model": false,
+      "citations": [
+        {
+          "index": 1,
+          "source": "account-health.md"
+        }
+      ],
+      "kept_sources": [
+        "account-health.md",
+        "listing-rules-and-prohibited-items.md",
+        "disputes.md"
+      ],
+      "passed": true,
+      "reasons": [],
+      "input_tokens": 2299,
+      "output_tokens": 67,
+      "timings_ms": {
+        "retrieve": 374.96216699992146,
+        "generate": 1057.0682080001461
+      }
+    },
+    {
+      "id": "in-18",
+      "slice": "direct",
+      "in_scope": true,
+      "question": "Can I sell alcohol on Kestrel Market?",
+      "expected_source": "listing-rules-and-prohibited-items.md",
+      "answer": "Yes, you can sell alcohol on Kestrel Market, but only under specific conditions. Alcohol is a restricted item, and you can only sell it through Kestrel Market's licensed alcohol program. You must be a seller who has submitted the required permits [1].",
+      "refused_without_model": false,
+      "citations": [
+        {
+          "index": 1,
+          "source": "listing-rules-and-prohibited-items.md"
+        }
+      ],
+      "kept_sources": [
+        "listing-rules-and-prohibited-items.md",
+        "fees.md"
+      ],
+      "passed": true,
+      "reasons": [],
+      "input_tokens": 1578,
+      "output_tokens": 60,
+      "timings_ms": {
+        "retrieve": 359.4009589996858,
+        "generate": 971.6975000001185
+      }
+    },
+    {
+      "id": "in-19",
+      "slice": "paraphrase",
+      "in_scope": true,
+      "question": "Is it okay to use the manufacturer's product photos for a refurbished laptop?",
+      "expected_source": "listing-rules-and-prohibited-items.md",
+      "answer": "No, it is not okay to use manufacturer's product photos for a refurbished laptop. [1]\n\nAccording to the listing accuracy requirements, at least one photo must be of the actual item being sold, not a stock or manufacturer photo, for any used, refurbished, or handmade item. Manufacturer photos are only permitted for new, factory-sealed items. [1]",
+      "refused_without_model": false,
+      "citations": [
+        {
+          "index": 1,
+          "source": "listing-rules-and-prohibited-items.md"
+        }
+      ],
+      "kept_sources": [
+        "listing-rules-and-prohibited-items.md",
+        "returns-and-refunds.md",
+        "disputes.md"
+      ],
+      "passed": true,
+      "reasons": [],
+      "input_tokens": 2417,
+      "output_tokens": 84,
+      "timings_ms": {
+        "retrieve": 412.8971250001996,
+        "generate": 1123.7424579999242
+      }
+    },
+    {
+      "id": "in-20",
+      "slice": "direct",
+      "in_scope": true,
+      "question": "How long do I have to submit evidence for a chargeback, and what happens if I lose?",
+      "expected_source": "disputes.md",
+      "answer": "For a chargeback, you have **7 days** to submit evidence through the Seller Portal (proof of delivery, order communication, the listing as it appeared at time of sale) [1].\n\nIf you lose the chargeback:\n- The held funds are permanently deducted from your account\n- An additional **$15 chargeback fee** is applied to cover processing costs [1]\n\nHowever, if you submit evidence within the 7-day window, a chargeback loss does not count against your seller's order defect rate in Account Health, since the outcome was outside your control once it reached the card network [1].",
+      "refused_without_model": false,
+      "citations": [
+        {
+          "index": 1,
+          "source": "disputes.md"
+        }
+      ],
+      "kept_sources": [
+        "disputes.md",
+        "account-health.md"
+      ],
+      "passed": true,
+      "reasons": [],
+      "input_tokens": 1594,
+      "output_tokens": 140,
+      "timings_ms": {
+        "retrieve": 411.007416999837,
+        "generate": 1636.5652500003307
+      }
+    },
+    {
+      "id": "out-01",
+      "slice": "general-knowledge",
+      "in_scope": false,
+      "question": "What is the capital of France?",
+      "expected_source": null,
+      "answer": "I couldn't find that in the marketplace policies, so I can't answer it reliably. Try rephrasing your question, or open a support case if you need a person to look at it.",
+      "refused_without_model": true,
+      "citations": [],
+      "kept_sources": [],
+      "passed": true,
+      "reasons": [],
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "timings_ms": {
+        "retrieve": 410.90358300016305
+      }
+    },
+    {
+      "id": "out-02",
+      "slice": "general-knowledge",
+      "in_scope": false,
+      "question": "How do I bake sourdough bread?",
+      "expected_source": null,
+      "answer": "I couldn't find that in the marketplace policies, so I can't answer it reliably. Try rephrasing your question, or open a support case if you need a person to look at it.",
+      "refused_without_model": true,
+      "citations": [],
+      "kept_sources": [],
+      "passed": true,
+      "reasons": [],
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "timings_ms": {
+        "retrieve": 353.3314999999675
+      }
+    },
+    {
+      "id": "out-03",
+      "slice": "general-knowledge",
+      "in_scope": false,
+      "question": "Who won the 2018 FIFA World Cup?",
+      "expected_source": null,
+      "answer": "I couldn't find that in the marketplace policies, so I can't answer it reliably. Try rephrasing your question, or open a support case if you need a person to look at it.",
+      "refused_without_model": true,
+      "citations": [],
+      "kept_sources": [],
+      "passed": true,
+      "reasons": [],
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "timings_ms": {
+        "retrieve": 360.8832079999047
+      }
+    },
+    {
+      "id": "out-04",
+      "slice": "other-platform",
+      "in_scope": false,
+      "question": "What are Amazon FBA's fulfillment fees for a small standard item?",
+      "expected_source": null,
+      "answer": "I can't answer that question based on the marketplace policies provided. The context contains information about Kestrel Market's fees, not Amazon FBA's fees.\n\nIf you have questions about Kestrel Market's fulfillment fees, I'd be happy to help with those instead.",
+      "refused_without_model": false,
+      "citations": [],
+      "kept_sources": [
+        "fees.md"
+      ],
+      "passed": true,
+      "reasons": [],
+      "input_tokens": 867,
+      "output_tokens": 63,
+      "timings_ms": {
+        "retrieve": 383.88625000015963,
+        "generate": 809.669791000033
+      }
+    },
+    {
+      "id": "out-05",
+      "slice": "other-platform",
+      "in_scope": false,
+      "question": "How do I renew a listing on Etsy?",
+      "expected_source": null,
+      "answer": "I don't have information about Etsy in the provided context. The context only covers Kestrel Market policies. If you have questions about Kestrel Market listings, I'd be happy to help with those instead.",
+      "refused_without_model": false,
+      "citations": [],
+      "kept_sources": [
+        "listing-rules-and-prohibited-items.md",
+        "fees.md"
+      ],
+      "passed": true,
+      "reasons": [],
+      "input_tokens": 1579,
+      "output_tokens": 50,
+      "timings_ms": {
+        "retrieve": 352.5850000000901,
+        "generate": 919.0134590003254
+      }
+    },
+    {
+      "id": "out-06",
+      "slice": "other-platform",
+      "in_scope": false,
+      "question": "What is eBay's Top Rated Seller program?",
+      "expected_source": null,
+      "answer": "I don't have information about eBay's Top Rated Seller program in the provided context. The context only covers Kestrel Market policies, not eBay policies.\n\nIf you have questions about Kestrel Market's seller programs or account standing, I'd be happy to help with those.",
+      "refused_without_model": false,
+      "citations": [],
+      "kept_sources": [
+        "account-health.md",
+        "fees.md",
+        "listing-rules-and-prohibited-items.md"
+      ],
+      "passed": true,
+      "reasons": [],
+      "input_tokens": 2250,
+      "output_tokens": 68,
+      "timings_ms": {
+        "retrieve": 403.8697500000126,
+        "generate": 817.3054580001917
+      }
+    },
+    {
+      "id": "out-07",
+      "slice": "nonsense",
+      "in_scope": false,
+      "question": "purple monkey dishwasher refund velocity",
+      "expected_source": null,
+      "answer": "I don't see how your question relates to the marketplace policies provided. \"Purple monkey dishwasher refund velocity\" doesn't match any topic in the returns, fees, or account health policies.\n\nCould you clarify what you're asking about? For example, are you asking about refund timing, refund rates, or something else?",
+      "refused_without_model": false,
+      "citations": [],
+      "kept_sources": [
+        "returns-and-refunds.md",
+        "fees.md",
+        "account-health.md"
+      ],
+      "passed": false,
+      "reasons": [
+        "answer doesn't match the refusal pattern"
+      ],
+      "input_tokens": 2311,
+      "output_tokens": 74,
+      "timings_ms": {
+        "retrieve": 309.33874999982436,
+        "generate": 919.9117080001997
+      }
+    },
+    {
+      "id": "out-08",
+      "slice": "nonsense",
+      "in_scope": false,
+      "question": "asdf qwer zxcv",
+      "expected_source": null,
+      "answer": "I couldn't find that in the marketplace policies, so I can't answer it reliably. Try rephrasing your question, or open a support case if you need a person to look at it.",
+      "refused_without_model": true,
+      "citations": [],
+      "kept_sources": [],
+      "passed": true,
+      "reasons": [],
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "timings_ms": {
+        "retrieve": 347.22450000026583
+      }
+    },
+    {
+      "id": "out-09",
+      "slice": "lookalike",
+      "in_scope": false,
+      "question": "How do I turn on two-factor authentication for my seller account?",
+      "expected_source": null,
+      "answer": "I don't know based on the marketplace policies provided. The context passages cover fees, returns and refunds, listing rules, account health, and disputes, but they don't contain information about two-factor authentication or account security settings.",
+      "refused_without_model": false,
+      "citations": [],
+      "kept_sources": [
+        "fees.md",
+        "returns-and-refunds.md",
+        "listing-rules-and-prohibited-items.md",
+        "account-health.md",
+        "disputes.md"
+      ],
+      "passed": true,
+      "reasons": [],
+      "input_tokens": 3756,
+      "output_tokens": 50,
+      "timings_ms": {
+        "retrieve": 472.8132079999341,
+        "generate": 920.0831670000298
+      }
+    },
+    {
+      "id": "out-10",
+      "slice": "lookalike",
+      "in_scope": false,
+      "question": "Does Kestrel Market collect sales tax on my behalf in every state?",
+      "expected_source": null,
+      "answer": "The context provided does not contain information about sales tax collection or whether Kestrel Market handles this on sellers' behalf. I don't know based on the marketplace policies provided.",
+      "refused_without_model": false,
+      "citations": [],
+      "kept_sources": [
+        "fees.md",
+        "disputes.md",
+        "listing-rules-and-prohibited-items.md"
+      ],
+      "passed": true,
+      "reasons": [],
+      "input_tokens": 2307,
+      "output_tokens": 39,
+      "timings_ms": {
+        "retrieve": 348.20191599965256,
+        "generate": 778.2474579998961
+      }
+    }
+  ]
+}
