@@ -144,12 +144,21 @@ build; don't let it drift from the code.
 
 ## Bedrock (Knowledge Bases, Guardrails, tool calling, structured outputs)
 
-- Status: Planned (phase 4)
+- Status: In progress (4a): Knowledge Base retrieval + Converse answer endpoint (`POST /v1/chat/sessions/{id}/messages`), code and fake-backed tests only; no KB provisioned or real Bedrock call made yet. Guardrails, tool calling, and structured outputs not started.
 - What it does: Knowledge Bases retrieve from ingested policy docs; Guardrails filter unsafe input/output; tool calling lets the model query seller/order data; structured outputs give the API typed, validated responses.
 - Why we chose it: Managed retrieval and safety instead of a hand-built RAG pipeline and moderation layer.
 - Rejected alternative: Self-hosted RAG with vLLM. I've built this before and know the ops cost firsthand: serving infra, a vector DB, and hand-rolled safety filtering, all first-party maintenance burden.
 - Tradeoff we accept: Vendor lock-in to Bedrock's APIs and models; Guardrails add latency and per-call cost on top of the base model call.
 - Revisit if: Retrieval quality or cost doesn't hold up under real evals.
+
+## Retrieve + Converse, not RetrieveAndGenerate
+
+- Status: In use (phase 4a; `src/copilot_api/rag/`)
+- What it does: The chat answer endpoint makes two Bedrock calls itself: `bedrock-agent-runtime.retrieve` (top_k from settings) for policy chunks, then `bedrock-runtime.converse` with our own system prompt and the surviving chunks as numbered context. Between them, the API drops chunks below `rag_min_score`, and if none are left it stores and returns a fixed refusal without calling the model at all. Both calls sit behind small `Retriever` / `Generator` protocols injected with `Depends`, so tests swap in fakes; the Bedrock adapters are the only code that touches AWS, run via `asyncio.to_thread` on clients built once at startup, with bounded timeouts. Any Bedrock failure becomes a 503 problem+json; the user's message stays stored and no assistant message is written.
+- Why we chose it: Each step we need to control or measure is ours. (1) The relevance floor and the zero-context refusal are a deterministic cost and hallucination guard: no context means no model call, which RetrieveAndGenerate can't express. (2) We own the prompt ("answer only from numbered context, cite [n], say you don't know"), so it's versioned in git, unit-tested, and the same prompt the eval harness will score. (3) Citations are built from exactly the chunks we sent, numbered to match the [n] markers, rather than parsed back out of a managed response. (4) Retrieval and generation are separately testable and separately measurable (retrieval recall vs. answer faithfulness) in the eval phase. (5) Converse is model-agnostic, so swapping models is a settings change.
+- Rejected alternative: `RetrieveAndGenerate` (one managed call). Less code and Bedrock formats citations for us, but the prompt template, chunk filtering, and "skip the model when nothing relevant came back" are all out of our hands, failures are one opaque error instead of "which stage failed", and testing it means faking one big managed response instead of two small interfaces. Also rejected: calling Converse with the whole policy corpus in context (no retrieval). The corpus is only ~3k words today, so it would work now, but cost grows linearly with the corpus on every request and it trains the system away from the retrieval it will need.
+- Tradeoff we accept: Two network round trips (and two failure points) instead of one, and more of our own code to maintain (prompt, citation mapping, score filtering). `rag_min_score` (0.3) is an untuned placeholder until the eval set exists: too high refuses answerable questions, too low lets weak context through. Citations list every chunk sent to the model, not only the ones the answer actually cites.
+- Revisit if: Evals show RetrieveAndGenerate's managed prompt/citations matching ours on faithfulness at lower latency, or we need Bedrock features only available through it.
 
 ## Eval harness
 

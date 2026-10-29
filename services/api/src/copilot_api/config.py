@@ -23,6 +23,17 @@ class Settings(BaseSettings):
     cognito_jwks_url: str = ""
     cognito_app_client_id: str = ""
 
+    # RAG chat (phase 4). Per-environment config, not secrets. No defaults for the KB or
+    # model id: either must be set explicitly, never baked into code. Until they are, every
+    # chat answer fails as a 503 (Bedrock rejects the empty id), not with a guessed model.
+    bedrock_knowledge_base_id: str = ""
+    bedrock_model_id: str = ""
+    rag_top_k: int = 5
+    # Relevance floor for retrieved chunks; untuned placeholder until the eval set exists.
+    rag_min_score: float = 0.3
+    # Output cap per answer: the main per-request cost lever on the model side.
+    rag_max_tokens: int = 1024
+
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.cors_allow_origins.split(",") if o.strip()]

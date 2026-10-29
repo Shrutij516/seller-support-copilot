@@ -134,7 +134,13 @@ export interface paths {
         /** List Chat Messages */
         get: operations["list_chat_messages_v1_chat_sessions__session_id__messages_get"];
         put?: never;
-        post?: never;
+        /**
+         * Post Chat Message
+         * @description Store the seller's question, answer it from the policy knowledge base, store and
+         *     return the answer. The question is stored even if answering fails (a 503 leaves the user
+         *     message in place and no assistant message), so the thread shows what was asked.
+         */
+        post: operations["post_chat_message_v1_chat_sessions__session_id__messages_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -277,6 +283,11 @@ export interface components {
          * @enum {string}
          */
         CaseType: "refund_request" | "escalation" | "other";
+        /** ChatMessageCreateBody */
+        ChatMessageCreateBody: {
+            /** Content */
+            content: string;
+        };
         /** ChatMessageListResponse */
         ChatMessageListResponse: {
             /** Items */
@@ -286,6 +297,8 @@ export interface components {
         };
         /** ChatMessageResponse */
         ChatMessageResponse: {
+            /** Citations */
+            citations: components["schemas"]["CitationResponse"][];
             /** Content */
             content: string;
             /**
@@ -330,6 +343,15 @@ export interface components {
             session_id: string;
             /** Title */
             title: string;
+        };
+        /** CitationResponse */
+        CitationResponse: {
+            /** Index */
+            index: number;
+            /** Snippet */
+            snippet: string;
+            /** Source */
+            source: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -729,6 +751,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChatMessageListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_chat_message_v1_chat_sessions__session_id__messages_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatMessageCreateBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatMessageResponse"];
                 };
             };
             /** @description Validation Error */

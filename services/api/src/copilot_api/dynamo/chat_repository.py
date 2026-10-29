@@ -27,12 +27,24 @@ class ChatSession:
 
 
 @dataclass(frozen=True, slots=True)
+class Citation:
+    """One numbered source behind an assistant answer: `index` matches the [n] markers the
+    model was told to cite with.
+    """
+
+    index: int
+    source: str
+    snippet: str
+
+
+@dataclass(frozen=True, slots=True)
 class ChatMessage:
     session_id: str
     message_id: str
     role: str
     content: str
     created_at: datetime
+    citations: tuple[Citation, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +74,23 @@ def _encode_cursor(key: dict[str, Any]) -> str:
 def _decode_cursor(cursor: str) -> dict[str, Any]:
     decoded: dict[str, Any] = json.loads(base64.urlsafe_b64decode(cursor.encode()))
     return decoded
+
+
+def _encode_citations(citations: tuple[Citation, ...]) -> str:
+    return json.dumps(
+        [{"index": c.index, "source": c.source, "snippet": c.snippet} for c in citations]
+    )
+
+
+def _decode_citations(item: dict[str, Any]) -> tuple[Citation, ...]:
+    # Absent on user messages and on anything written before citations existed.
+    raw = item.get("citations")
+    if raw is None:
+        return ()
+    return tuple(
+        Citation(index=c["index"], source=c["source"], snippet=c["snippet"])
+        for c in json.loads(raw["S"])
+    )
 
 
 class ChatRepository:
@@ -132,11 +161,27 @@ class ChatRepository:
             last_message_at=datetime.fromisoformat(item["last_message_at"]["S"]),
         )
 
-    async def append_message(self, session_id: str, role: str, content: str) -> ChatMessage:
+    async def append_message(
+        self,
+        session_id: str,
+        role: str,
+        content: str,
+        citations: tuple[Citation, ...] = (),
+    ) -> ChatMessage:
         message_id = str(ULID())
         now = datetime.now(UTC)
         expires_at = now + timedelta(days=SESSION_TTL_DAYS)
         pk = _session_pk(session_id)
+        message_item: dict[str, Any] = {
+            "PK": {"S": pk},
+            "SK": {"S": f"MSG#{message_id}"},
+            "role": {"S": role},
+            "content": {"S": content},
+            "created_at": {"S": now.isoformat()},
+            "expires_at": {"N": str(int(expires_at.timestamp()))},
+        }
+        if citations:
+            message_item["citations"] = {"S": _encode_citations(citations)}
 
         def _write() -> None:
             try:
@@ -145,14 +190,7 @@ class ChatRepository:
                         {
                             "Put": {
                                 "TableName": self._table_name,
-                                "Item": {
-                                    "PK": {"S": pk},
-                                    "SK": {"S": f"MSG#{message_id}"},
-                                    "role": {"S": role},
-                                    "content": {"S": content},
-                                    "created_at": {"S": now.isoformat()},
-                                    "expires_at": {"N": str(int(expires_at.timestamp()))},
-                                },
+                                "Item": message_item,
                             }
                         },
                         {
@@ -183,6 +221,7 @@ class ChatRepository:
             role=role,
             content=content,
             created_at=now,
+            citations=citations,
         )
 
     async def list_messages(
@@ -216,6 +255,7 @@ class ChatRepository:
                 role=item["role"]["S"],
                 content=item["content"]["S"],
                 created_at=datetime.fromisoformat(item["created_at"]["S"]),
+                citations=_decode_citations(item),
             )
             for item in response.get("Items", [])
         ]
