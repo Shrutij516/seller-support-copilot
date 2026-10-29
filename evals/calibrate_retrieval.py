@@ -53,6 +53,9 @@ class GoldenQuestion:
     slice: str
     expected_source: str | None
     expected_fact: str | None
+    # Machine-checkable form of expected_fact, used by answer_eval.py (all must appear;
+    # "a|b" means either). None for out-of-scope questions.
+    key_terms: list[str] | None = None
 
 
 @dataclass
@@ -86,6 +89,8 @@ def load_golden(path: Path) -> list[GoldenQuestion]:
     for q in questions:
         if q.in_scope != (q.expected_source is not None):
             raise ValueError(f"{q.id}: in_scope must match whether expected_source is set")
+        if q.in_scope != bool(q.key_terms):
+            raise ValueError(f"{q.id}: in-scope questions (only) need key_terms")
     return questions
 
 

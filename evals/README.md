@@ -1,7 +1,7 @@
 # evals
 
-Offline and live evaluation for the RAG chat. Started in phase 4c with retrieval calibration.
-Answer-quality and safety evals come later.
+Offline and live evaluation for the RAG chat: retrieval calibration and an end-to-end answer eval (phase 4c).
+Safety evals come later.
 
 ## Retrieval calibration
 
@@ -16,6 +16,19 @@ Answer-quality and safety evals come later.
 - **Unit tests:** the metric and threshold math is tested offline in `services/api/tests/unit/test_calibrate_retrieval.py`.
 
 `scripts/rag_smoke.py` (run with `make rag-smoke Q="..."`) is the companion manual check. It produces one full answer through the route's retrieve → filter → prompt → Converse path, with per-stage latency.
+
+## Answer eval
+
+`answer_eval.py` (run with `make eval-answers`) sends every golden question through `copilot_api.rag.pipeline.answer_question`, the exact function the chat route calls. It uses the current `rag_min_score` (override with `--min-score`), the app's `top_k` and `max_tokens`, and model `us.anthropic.claude-haiku-4-5-20251001-v1:0`. Output goes to `results/answers-<date>.json`.
+
+Scoring is deterministic; there's no LLM judge:
+
+- **In-scope passes** when both of these hold:
+  - Every entry in the question's `key_terms` appears in the answer. Before matching, answers are lowercased, whitespace is collapsed, curly quotes and en/em dashes become ASCII, and citation markers like `[2]` are removed, so they can't satisfy a number. A numeric term such as `30` or `2.40` matches only as a whole number: `30` matches "30 days" and "30-day", not "300". `a|b` accepts either alternative.
+  - At least one returned citation is from `expected_source`. Citations are already filtered to the ones the answer marks with `[n]`.
+- **Out-of-scope passes** when the answer has **zero citations** and matches this refusal pattern (case-insensitive): "I don't know" / "I do not know"; "couldn't / could not / can't / cannot find"; "can't / cannot / am unable to answer"; "don't have / contain / include / cover (any) information / details"; "no / not enough information"; "isn't / is not / not covered / mentioned / addressed / included / described"; "doesn't / does not cover / mention / address / include / describe". The exact regex is `REFUSAL_PATTERN` in `answer_eval.py` and is saved in each results file. The pipeline's own refusal (nothing above the floor, so no model call) matches it.
+
+The run prints pass rates per slice, every failure (question, first 200 characters of the answer, citations, reasons), total Converse input/output tokens, and an **estimated** cost. The estimate uses Bedrock on-demand pricing for Claude 4.5 Haiku on the Geo / in-region cross-region table, US East (N. Virginia): $1.10 per 1M input tokens and $5.50 per 1M output, viewed 2026-10-29 at https://aws.amazon.com/bedrock/pricing/. It excludes Retrieve costs. Scoring is unit-tested offline in `services/api/tests/unit/test_answer_eval.py`.
 
 ## Known limitations of this set
 

@@ -1,17 +1,17 @@
-"""One live RAG answer through the same pieces POST /v1/chat/sessions/{id}/messages uses.
+"""One live RAG answer through copilot_api.rag.pipeline.answer_question, the exact function
+POST /v1/chat/sessions/{id}/messages calls.
 
-Retrieve (BedrockKnowledgeBaseRetriever) -> filter_by_min_score -> refusal if nothing is
-left (no model call, same as the route) -> build_user_message + SYSTEM_PROMPT ->
-BedrockConverseGenerator -> make_citations. Prints the answer, citations, and per-stage
-latency. Calls real Bedrock with your own AWS session (costs a little); run by hand via
-`make rag-smoke Q="..."`. Nothing is stored: no DynamoDB, no Postgres, no HTTP layer.
+Retrieve -> filter at rag_min_score -> refusal with no model call if nothing is left ->
+numbered prompt -> Converse -> keep only the citations the answer marks with [n]. Prints the
+answer, citations, and per-stage latency. Calls real Bedrock with your own AWS session
+(costs a little); run by hand via `make rag-smoke Q="..."`. Nothing is stored: no DynamoDB,
+no Postgres, no HTTP layer.
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
-import time
 
 from copilot_api.config import Settings
 from copilot_api.rag.bedrock import (
@@ -20,19 +20,9 @@ from copilot_api.rag.bedrock import (
     create_bedrock_agent_runtime_client,
     create_bedrock_runtime_client,
 )
-from copilot_api.rag.prompt import (
-    REFUSAL_MESSAGE,
-    SYSTEM_PROMPT,
-    build_user_message,
-    filter_by_min_score,
-    make_citations,
-)
+from copilot_api.rag.pipeline import answer_question
 
 DEFAULT_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
-
-
-def _ms(start: float) -> str:
-    return f"{(time.perf_counter() - start) * 1000:.0f} ms"
 
 
 async def run(args: argparse.Namespace) -> None:
@@ -53,30 +43,21 @@ async def run(args: argparse.Namespace) -> None:
     print(f"kb:        {args.kb_id}  top_k={args.top_k}  min_score={min_score}")
     print(f"model:     {args.model_id}  max_tokens={args.max_tokens}")
 
-    t = time.perf_counter()
-    chunks = await retriever.retrieve(args.question)
-    print(f"\n[retrieve] {_ms(t)}: {len(chunks)} chunks")
-    for c in chunks:
+    answer = await answer_question(args.question, retriever, generator, min_score)
+
+    print(f"\n[retrieve] {answer.timings_ms['retrieve']:.0f} ms: {len(answer.retrieved)} chunks")
+    for c in answer.retrieved:
         print(f"  {c.score:.4f}  {c.source}")
-
-    t = time.perf_counter()
-    kept = filter_by_min_score(chunks, min_score)
-    print(f"[filter]   {_ms(t)}: {len(kept)} kept at >= {min_score}")
-
-    if not kept:
-        print(f"\n[refusal, model not called]\n{REFUSAL_MESSAGE}")
+    print(f"[filter]   {len(answer.kept)} kept at >= {min_score}")
+    if answer.refused:
+        print(f"\n[refusal, model not called]\n{answer.text}")
         return
+    print(f"[converse] {answer.timings_ms['generate']:.0f} ms")
+    print(f"tokens:    input {generator.input_tokens}, output {generator.output_tokens}")
 
-    t = time.perf_counter()
-    user_message = build_user_message(args.question, kept)
-    print(f"[prompt]   {_ms(t)}: {len(user_message)} chars of user message")
-
-    t = time.perf_counter()
-    answer = await generator.generate(SYSTEM_PROMPT, user_message)
-    print(f"[converse] {_ms(t)}")
-
-    print(f"\nanswer:\n{answer}\n\ncitations:")
-    for citation in make_citations(kept):
+    print(f"\nanswer:\n{answer.text}\n")
+    print(f"citations (only those marked in the answer): {len(answer.citations)}")
+    for citation in answer.citations:
         print(f"  [{citation.index}] {citation.source}: {citation.snippet[:120]!r}")
 
 

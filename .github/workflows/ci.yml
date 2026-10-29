@@ -59,6 +59,13 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run mypy
+      # Live eval and smoke scripts live outside the package; lint and type-check them with the
+      # API's config, resolving copilot_api from source (MYPYPATH) since it ships no py.typed.
+      - name: Lint and type-check evals/ and scripts/
+        run: |
+          uv run ruff check --config pyproject.toml ../../evals ../../scripts
+          uv run ruff format --check --config pyproject.toml ../../evals ../../scripts
+          MYPYPATH=src:../../evals uv run mypy ../../evals ../../scripts
       - name: Migrations are reversible (upgrade / downgrade / upgrade)
         run: |
           uv run alembic upgrade head

@@ -1,3 +1,5 @@
+import re
+
 from copilot_api.dynamo.chat_repository import Citation
 from copilot_api.rag.types import RetrievedChunk
 
@@ -44,3 +46,22 @@ def make_citations(chunks: list[RetrievedChunk]) -> tuple[Citation, ...]:
         Citation(index=n, source=chunk.source, snippet=chunk.text[:CITATION_SNIPPET_MAX_CHARS])
         for n, chunk in enumerate(chunks, start=1)
     )
+
+
+# [1], [12], [2][3] (two markers) and [1, 2] (one marker listing several).
+CITATION_MARKER = re.compile(r"\[(\d+(?:\s*,\s*\d+)*)\]")
+
+
+def cited_indices(answer: str) -> set[int]:
+    return {
+        int(n) for marker in CITATION_MARKER.findall(answer) for n in re.split(r"\s*,\s*", marker)
+    }
+
+
+def filter_cited(answer: str, citations: tuple[Citation, ...]) -> tuple[Citation, ...]:
+    """Only the citations the answer actually points at, keeping their original [n] numbers
+    (so markers in the text still match). Numbers with no matching citation are ignored; an
+    answer with no markers (a refusal, or an uncited reply) gets no citations.
+    """
+    wanted = cited_indices(answer)
+    return tuple(c for c in citations if c.index in wanted)

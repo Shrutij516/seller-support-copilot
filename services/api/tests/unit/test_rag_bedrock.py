@@ -97,6 +97,7 @@ async def test_generator_sends_system_prompt_and_max_tokens_and_returns_text() -
         answer = await generator.generate("SYSTEM", "USER")
 
     assert answer == "Five days [1]."
+    assert (generator.input_tokens, generator.output_tokens) == (10, 4)
 
 
 async def test_generator_client_error_becomes_rag_backend_error() -> None:

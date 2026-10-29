@@ -98,6 +98,10 @@ class BedrockConverseGenerator:
         self._client = client
         self._model_id = model_id
         self._max_tokens = max_tokens
+        # Running totals from Converse's `usage` field, for eval cost reporting. Not
+        # per-request state; nothing in the request path reads them.
+        self.input_tokens = 0
+        self.output_tokens = 0
 
     async def generate(self, system_prompt: str, user_message: str) -> str:
         def _call() -> Any:
@@ -112,6 +116,10 @@ class BedrockConverseGenerator:
             response = await asyncio.to_thread(_call)
         except (ClientError, BotoCoreError) as exc:
             raise RagBackendError("converse", _reason(exc)) from exc
+
+        usage = response.get("usage", {})
+        self.input_tokens += int(usage.get("inputTokens", 0))
+        self.output_tokens += int(usage.get("outputTokens", 0))
 
         blocks = response.get("output", {}).get("message", {}).get("content", [])
         text = "".join(block["text"] for block in blocks if "text" in block).strip()

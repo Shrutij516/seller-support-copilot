@@ -30,7 +30,7 @@ CLIENT_DIR := packages/api-client
 # Uses the pnpm version pinned in package.json via corepack (ships with Node 24).
 PNPM ?= corepack pnpm
 
-.PHONY: up down test test-integration lint typecheck migrate dynamodb-init seed coverage openapi openapi-check link-user api-client api-client-check kb-upload kb-ingest deploy-policy-create deploy-policy-update cdk-bootstrap eval-retrieval rag-smoke
+.PHONY: up down test test-integration lint typecheck migrate dynamodb-init seed coverage openapi openapi-check link-user api-client api-client-check kb-upload kb-ingest deploy-policy-create deploy-policy-update cdk-bootstrap eval-retrieval rag-smoke eval-answers
 
 up: ## Start Postgres, DynamoDB Local, and the API; wait until healthy
 	docker compose up -d --build --wait
@@ -177,3 +177,12 @@ rag-smoke: ## One live answer through the route's RAG code path: make rag-smoke 
 	fi; \
 	uv run --project $(API_DIR) python scripts/rag_smoke.py --kb-id "$$kb_id" --region $(KB_REGION) \
 		--model-id "$(RAG_SMOKE_MODEL)" --question "$(Q)"
+
+eval-answers: ## Run every golden question through the RAG pipeline and score answers; writes evals/results/
+	@set -e; \
+	kb_id=$(call kb_output,KnowledgeBaseId); \
+	if [ -z "$$kb_id" ] || [ "$$kb_id" = "None" ]; then \
+		echo "No KnowledgeBaseId output on stack $(KB_STACK) in $(KB_REGION)." >&2; exit 1; \
+	fi; \
+	uv run --project $(API_DIR) python evals/answer_eval.py --kb-id "$$kb_id" --region $(KB_REGION) \
+		--model-id "$(RAG_SMOKE_MODEL)"
