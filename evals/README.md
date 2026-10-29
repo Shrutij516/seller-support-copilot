@@ -30,9 +30,15 @@ Scoring is deterministic; there's no LLM judge:
 
 The run prints pass rates per slice, every failure (question, first 200 characters of the answer, citations, reasons), total Converse input/output tokens, and an **estimated** cost. The estimate uses Bedrock on-demand pricing for Claude 4.5 Haiku on the Geo / in-region cross-region table, US East (N. Virginia): $1.10 per 1M input tokens and $5.50 per 1M output, viewed 2026-10-29 at https://aws.amazon.com/bedrock/pricing/. It excludes Retrieve costs. Scoring is unit-tested offline in `services/api/tests/unit/test_answer_eval.py`.
 
+## Results files
+
+Both scripts write to `results/` and never overwrite. The first run of a day is `<kind>-<date>.json`, and later runs that day are `<kind>-<date>-02.json`, `-03` and so on (exclusive create). The committed baseline is `retrieval-2026-10-29.json` and `answers-2026-10-29.json`. `answers-2026-10-29-02.json` is the rerun after the "do not offer related information" prompt rule: out-of-scope 8/10, up from 7/10.
+
 ## Known limitations of this set
 
 - **Author bias.** The same person (with AI assistance) wrote the policies in `data/policies/` and these questions. The questions inherit the policies' vocabulary, which likely inflates hit rates and in-scope scores compared with real sellers' wording. The `paraphrase` slice partly counters this. Real seller questions should replace or extend this set once there are any.
 - **Small sample.** 20 in-scope questions means "≥95% kept" is "at most one in-scope question lost". The recommended threshold is only as good as the score gap between the classes in this sample. Read the distributions, not just the single number.
-- **Clarification requests fail the out-of-scope check.** An answer that asks the user to clarify (as for `out-08`, "asdf qwer zxcv") with zero citations is safe behavior, but it doesn't match the deterministic refusal pattern, so it's scored as a failure. This is deliberate: the pattern isn't widened to chase individual answers, because every widening also risks accepting real non-refusals. Read these failures by hand. If a clarification is what the product should do, decide that explicitly rather than editing the regex to make a number go up.
+- **Some safe non-answers fail the out-of-scope check.** Two kinds of zero-citation answer are safe but don't match the deterministic refusal pattern, so they're scored as failures:
+  - a clarification request (`out-08`, "asdf qwer zxcv")
+  - a refusal worded outside the pattern (`out-07`, "purple monkey dishwasher refund velocity", answered "The context provided doesn't contain information about..."). This is deliberate: the pattern isn't widened to chase individual answers, because every widening also risks accepting real non-refusals. Read these failures by hand. If a clarification is what the product should do, decide that explicitly rather than editing the regex to make a number go up.
 - **One KB snapshot.** Scores depend on the embedding model, chunking and the indexed docs. Re-run after any of those change.

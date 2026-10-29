@@ -27,7 +27,7 @@ import hashlib
 import json
 import statistics
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -77,6 +77,27 @@ class QuestionResult:
     hit_at_1: bool | None
     hit_at_5: bool | None
     chunks: list[ChunkRecord] = field(default_factory=list)
+
+
+def write_new_results(results_dir: Path, prefix: str, day: date, payload: dict[str, Any]) -> Path:
+    """Write `payload` to a results file that never replaces an existing one: the first run of
+    a day is `<prefix>-<date>.json`, later runs `<prefix>-<date>-02.json`, `-03`, ... Opened
+    with exclusive create, so even a race can't overwrite a baseline.
+    """
+    results_dir.mkdir(parents=True, exist_ok=True)
+    base = f"{prefix}-{day.isoformat()}"
+    candidates = [results_dir / f"{base}.json"] + [
+        results_dir / f"{base}-{n:02d}.json" for n in range(2, 100)
+    ]
+    text = json.dumps(payload, indent=2) + "\n"
+    for path in candidates:
+        try:
+            with path.open("x") as fh:
+                fh.write(text)
+        except FileExistsError:
+            continue
+        return path
+    raise RuntimeError(f"more than 99 {prefix} results for {day.isoformat()} in {results_dir}")
 
 
 def load_golden(path: Path) -> list[GoldenQuestion]:
@@ -255,22 +276,19 @@ def run(args: argparse.Namespace) -> Path:
     summary = summarize(results)
 
     now = datetime.now(UTC)
-    args.results_dir.mkdir(parents=True, exist_ok=True)
-    out_path: Path = args.results_dir / f"retrieval-{now.date().isoformat()}.json"
-    out_path.write_text(
-        json.dumps(
-            {
-                "run_at": now.isoformat(),
-                "knowledge_base_id": args.kb_id,
-                "region": args.region,
-                "top_k": args.top_k,
-                "golden_file": args.golden.name,
-                "summary": summary,
-                "results": [asdict(r) for r in results],
-            },
-            indent=2,
-        )
-        + "\n"
+    out_path = write_new_results(
+        args.results_dir,
+        "retrieval",
+        now.date(),
+        {
+            "run_at": now.isoformat(),
+            "knowledge_base_id": args.kb_id,
+            "region": args.region,
+            "top_k": args.top_k,
+            "golden_file": args.golden.name,
+            "summary": summary,
+            "results": [asdict(r) for r in results],
+        },
     )
     print_report(summary, out_path)
     return out_path

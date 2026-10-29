@@ -9,14 +9,12 @@ manually.
 Kestrel Market charges a referral fee as a percentage of the item's sale price (not
 including shipping charged to the buyer), varying by category:
 
-| Category                    | Referral fee |
-| --------------------------- | ------------ |
-| Electronics                 | 8%           |
-| Home and kitchen            | 12%          |
-| Clothing and accessories    | 14%          |
-| Handmade and craft supplies | 10%          |
-| Books and media             | 15%          |
-| Everything else (default)   | 12%          |
+- Electronics: 8%
+- Home and kitchen: 12%
+- Clothing and accessories: 14%
+- Handmade and craft supplies: 10%
+- Books and media: 15%
+- Everything else (default): 12%
 
 The referral fee has a minimum of $0.30 per item, so very low-priced items (under roughly
 $2.50 at the default rate) are charged the $0.30 floor instead of the percentage.

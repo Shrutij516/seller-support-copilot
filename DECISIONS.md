@@ -253,6 +253,16 @@ build; don't let it drift from the code.
 - Token accounting: `Generator.generate()` returns a `Generation(text, input_tokens, output_tokens)` per call. `answer_question` puts that call's usage on `RagAnswer`, and the eval and smoke script sum it. Rejected: the first version accumulated running totals on `BedrockConverseGenerator`. That generator is an app-wide singleton shared by concurrent requests, so the counters were shared mutable state that nothing in the request path should own. A unit test now asserts the generator has no such attributes.
 - Revisit if: The golden set grows past what a person can read through, or term-matching false failures become common.
 
+## Chunking anomaly: markdown tables vs FIXED_SIZE chunks (experiment in progress)
+
+- Status: Experiment running (phase 4c). Data change committed; the owner re-ingests and re-runs the evals.
+- What it does: Tests whether markdown tables stop Bedrock's FIXED_SIZE chunker (300 tokens, 20% overlap) from splitting a document. In the baseline retrieval run (`evals/results/retrieval-2026-10-29.json`), the three policy files that contain a markdown table came back as one chunk each: `account-health.md` about 662 tokens, `fees.md` about 608, `shipping-and-delivery-slas.md` about 718. The three without a table came back as 3 chunks each, at most about 310 tokens. In `fees.md` the only table (referral fee by category) is converted to a bullet list with the same rows and numbers; nothing else changes. `account-health.md` and `shipping-and-delivery-slas.md` keep their tables as the control group.
+- Prediction: after `make kb-upload` and `make kb-ingest`, `fees.md` goes from 1 chunk to about 2–3, and the two control files stay at 1. If `fees.md` stays at 1, tables aren't the cause and the hypothesis is rejected.
+- Why we chose it: A whole-file chunk dilutes the embedding (one vector for six topics) and sends ~700 tokens of mostly irrelevant context to the model. A one-file, one-variable change with a control group gives a causal answer, not just a correlation across six files.
+- Rejected alternative: Converting all three files at once (no control, so a re-ingest artifact couldn't be told apart from a real effect). Also rejected: switching chunking strategy (semantic or hierarchical) before knowing the cause. That changes many variables at once and costs a full re-ingest anyway.
+- Tradeoff we accept: The fees doc reads slightly worse as a list than as a table, and the result is from one KB snapshot with approximate token counts (words × 1.33).
+- Revisit if: The prediction fails (then look at Bedrock's parsing of these files directly), or it holds (then decide whether to convert the control files' tables too, or change the chunking strategy).
+
 ## Eval harness
 
 - Status: Planned (phase 5)

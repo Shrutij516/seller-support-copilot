@@ -26,14 +26,19 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from calibrate_retrieval import DEFAULT_GOLDEN, DEFAULT_RESULTS_DIR, GoldenQuestion, load_golden
+from calibrate_retrieval import (
+    DEFAULT_GOLDEN,
+    DEFAULT_RESULTS_DIR,
+    GoldenQuestion,
+    load_golden,
+    write_new_results,
+)
 
 from copilot_api.config import Settings
 from copilot_api.rag.bedrock import (
@@ -284,26 +289,23 @@ def run(args: argparse.Namespace) -> Path:
     )
     summary = summarize(results)
     now = datetime.now(UTC)
-    args.results_dir.mkdir(parents=True, exist_ok=True)
-    out_path: Path = args.results_dir / f"answers-{now.date().isoformat()}.json"
-    out_path.write_text(
-        json.dumps(
-            {
-                "run_at": now.isoformat(),
-                "knowledge_base_id": args.kb_id,
-                "region": args.region,
-                "model_id": args.model_id,
-                "rag_min_score": min_score,
-                "top_k": defaults.rag_top_k,
-                "max_tokens": defaults.rag_max_tokens,
-                "golden_file": args.golden.name,
-                "refusal_pattern": REFUSAL_PATTERN.pattern,
-                "summary": summary,
-                "results": [asdict(r) for r in results],
-            },
-            indent=2,
-        )
-        + "\n"
+    out_path = write_new_results(
+        args.results_dir,
+        "answers",
+        now.date(),
+        {
+            "run_at": now.isoformat(),
+            "knowledge_base_id": args.kb_id,
+            "region": args.region,
+            "model_id": args.model_id,
+            "rag_min_score": min_score,
+            "top_k": defaults.rag_top_k,
+            "max_tokens": defaults.rag_max_tokens,
+            "golden_file": args.golden.name,
+            "refusal_pattern": REFUSAL_PATTERN.pattern,
+            "summary": summary,
+            "results": [asdict(r) for r in results],
+        },
     )
     print_report(results, summary, out_path)
     return out_path

@@ -6,6 +6,7 @@ import argparse
 import importlib.util
 import json
 import sys
+from datetime import date
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -194,3 +195,41 @@ def test_run_writes_results_file_without_calling_bedrock(
     assert written["summary"]["threshold"]["out_of_scope_refused"] == 10
     assert len(written["results"]) == 30
     assert "hit@1 (in-scope): 100.00%" in capsys.readouterr().out
+
+
+def test_write_new_results_never_overwrites(tmp_path: Path) -> None:
+    day = date(2026, 10, 29)
+    baseline = tmp_path / "answers-2026-10-29.json"
+    baseline.write_text('{"baseline": true}\n')
+
+    second = cal.write_new_results(tmp_path, "answers", day, {"run": 2})
+    third = cal.write_new_results(tmp_path, "answers", day, {"run": 3})
+    other_prefix = cal.write_new_results(tmp_path, "retrieval", day, {"run": 1})
+
+    assert baseline.read_text() == '{"baseline": true}\n'
+    assert second.name == "answers-2026-10-29-02.json"
+    assert third.name == "answers-2026-10-29-03.json"
+    assert json.loads(third.read_text()) == {"run": 3}
+    assert other_prefix.name == "retrieval-2026-10-29.json"
+
+
+def test_run_twice_same_day_keeps_both_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def fake_retrieve_all(questions: list[Any], *_: object) -> list[Any]:
+        return [cal.score_question(q, [_chunk("fees.md", 0.7)]) for q in questions]
+
+    monkeypatch.setattr(cal, "retrieve_all", fake_retrieve_all)
+    args = argparse.Namespace(
+        golden=cal.DEFAULT_GOLDEN,
+        kb_id="KBTEST",
+        region="us-east-1",
+        top_k=5,
+        results_dir=tmp_path,
+    )
+
+    first, second = cal.run(args), cal.run(args)
+
+    assert first != second
+    assert first.exists() and second.exists()
+    assert second.name.endswith("-02.json")
