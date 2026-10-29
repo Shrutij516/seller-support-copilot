@@ -4,6 +4,10 @@ INFRA_DIR := infra
 # Knowledge Base stack (infra/lib/knowledge-base-stack.ts). kb-* targets call real AWS with
 # your own credentials and cost money; nothing (CI included) runs them automatically.
 KB_STACK ?= KnowledgeBaseStack
+# Cognito (AuthStack). auth-* targets call real AWS with your own credentials; run by hand.
+AUTH_STACK ?= AuthStack
+auth_output = $$(aws cloudformation describe-stacks --region $(KB_REGION) --stack-name $(AUTH_STACK) \
+	--query 'Stacks[0].Outputs[?OutputKey==`$(1)`].OutputValue' --output text)
 KB_REGION ?= us-east-1
 KB_DOCS_DIR := data/policies
 # Live RAG checks (eval-retrieval, rag-smoke) call Bedrock with your own AWS session via the
@@ -30,7 +34,7 @@ CLIENT_DIR := packages/api-client
 # Uses the pnpm version pinned in package.json via corepack (ships with Node 24).
 PNPM ?= corepack pnpm
 
-.PHONY: up down test test-integration lint typecheck migrate dynamodb-init seed coverage openapi openapi-check link-user api-client api-client-check kb-upload kb-ingest deploy-policy-create deploy-policy-update cdk-bootstrap eval-retrieval rag-smoke eval-answers
+.PHONY: up down test test-integration lint typecheck migrate dynamodb-init seed coverage openapi openapi-check link-user api-client api-client-check kb-upload kb-ingest deploy-policy-create deploy-policy-update cdk-bootstrap eval-retrieval rag-smoke eval-answers auth-create-user auth-env
 
 up: ## Start Postgres, DynamoDB Local, and the API; wait until healthy
 	docker compose up -d --build --wait
@@ -186,3 +190,45 @@ eval-answers: ## Run every golden question through the RAG pipeline and score an
 	fi; \
 	uv run --project $(API_DIR) python evals/answer_eval.py --kb-id "$$kb_id" --region $(KB_REGION) \
 		--model-id "$(RAG_SMOKE_MODEL)"
+
+auth-create-user: ## Invite-only user: make auth-create-user EMAIL=you@example.com GROUP=seller|admin (prompts for a temporary password)
+	@if [ -z "$(EMAIL)" ] || { [ "$(GROUP)" != "seller" ] && [ "$(GROUP)" != "admin" ]; }; then \
+		echo 'Usage: make auth-create-user EMAIL=<email> GROUP=seller|admin' >&2; exit 1; \
+	fi
+	@# The temporary password is read with echo off and sent on stdin (--cli-input-json
+	@# file:///dev/stdin): never echoed, never in a file, never in a process argument list.
+	@set -e; \
+	pool=$(call auth_output,UserPoolId); \
+	if [ -z "$$pool" ] || [ "$$pool" = "None" ]; then echo "No UserPoolId output on stack $(AUTH_STACK)." >&2; exit 1; fi; \
+	trap 'stty echo 2>/dev/null' EXIT INT TERM; \
+	printf 'Temporary password for $(EMAIL) (not shown): ' >&2; stty -echo; IFS= read -r pw; stty echo; echo >&2; \
+	[ -n "$$pw" ] || { echo "Empty password." >&2; exit 1; }; \
+	esc=$$(printf '%s' "$$pw" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'); \
+	sub=$$(printf '{"UserPoolId":"%s","Username":"%s","TemporaryPassword":"%s","MessageAction":"SUPPRESS","UserAttributes":[{"Name":"email","Value":"%s"},{"Name":"email_verified","Value":"true"}]}' \
+		"$$pool" "$(EMAIL)" "$$esc" "$(EMAIL)" \
+		| aws cognito-idp admin-create-user --region $(KB_REGION) --cli-input-json file:///dev/stdin \
+			--query "User.Attributes[?Name=='sub'].Value | [0]" --output text); \
+	unset pw esc; \
+	aws cognito-idp admin-add-user-to-group --region $(KB_REGION) --user-pool-id "$$pool" \
+		--username "$(EMAIL)" --group-name "$(GROUP)"; \
+	echo "Created $(EMAIL) in group $(GROUP) (sub $$sub). They must set a new password at first sign-in."; \
+	if [ "$(GROUP)" = "seller" ]; then echo "Link to a seller row: make link-user EMAIL=<seed seller email> SUB=$$sub"; fi
+
+auth-env: ## Print env lines for apps/web/.env.local and services/api/.env from the AuthStack outputs (both gitignored)
+	@set -e; \
+	issuer=$(call auth_output,Issuer); client=$(call auth_output,UserPoolClientId); \
+	jwks=$(call auth_output,JwksUrl); domain=$(call auth_output,HostedDomain); \
+	if [ -z "$$issuer" ] || [ "$$issuer" = "None" ]; then echo "No outputs on stack $(AUTH_STACK)." >&2; exit 1; fi; \
+	echo "# apps/web/.env.local"; \
+	echo "NEXT_PUBLIC_COGNITO_AUTHORITY=$$issuer"; \
+	echo "NEXT_PUBLIC_COGNITO_CLIENT_ID=$$client"; \
+	echo "NEXT_PUBLIC_COGNITO_DOMAIN=$$domain"; \
+	echo "NEXT_PUBLIC_COGNITO_REDIRECT_URI=http://localhost:3000/auth/callback"; \
+	echo "NEXT_PUBLIC_COGNITO_LOGOUT_URI=http://localhost:3000"; \
+	echo "NEXT_PUBLIC_COGNITO_SCOPE=openid email"; \
+	echo; \
+	echo "# services/api/.env"; \
+	echo "COGNITO_ISSUER=$$issuer"; \
+	echo "COGNITO_JWKS_URL=$$jwks"; \
+	echo "COGNITO_APP_CLIENT_ID=$$client"
+

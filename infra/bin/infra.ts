@@ -3,6 +3,7 @@ import { App } from "aws-cdk-lib";
 
 import { type BudgetConfig, BudgetStack, budgetConfigFromContext } from "../lib/budget-stack";
 import { KB_REGION, KnowledgeBaseStack } from "../lib/knowledge-base-stack";
+import { AUTH_REGION, AuthStack } from "../lib/auth-stack";
 
 const app = new App();
 
@@ -25,4 +26,9 @@ new KnowledgeBaseStack(app, "KnowledgeBaseStack", {
   // deploying credentials, so synth needs neither credentials nor lookups.
   env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: KB_REGION },
   description: "Seller Support Copilot: Bedrock Knowledge Base over seller policy docs",
+});
+
+new AuthStack(app, "AuthStack", {
+  env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: AUTH_REGION },
+  description: "Seller Support Copilot: Cognito user pool, groups, web app client, hosted UI domain",
 });
