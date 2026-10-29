@@ -94,9 +94,14 @@ async def test_generator_sends_system_prompt_and_max_tokens_and_returns_text() -
                 "inferenceConfig": {"maxTokens": 256, "temperature": 0.0},
             },
         )
-        answer = await generator.generate("SYSTEM", "USER")
+        generation = await generator.generate("SYSTEM", "USER")
 
-    assert answer == "Five days [1]."
+    assert generation.text == "Five days [1]."
+    assert (generation.input_tokens, generation.output_tokens) == (10, 4)
+    # The generator is an app-wide singleton: usage must come back per call, never be
+    # accumulated on the instance where concurrent requests would share it.
+    assert not hasattr(generator, "input_tokens")
+    assert not hasattr(generator, "output_tokens")
 
 
 async def test_generator_client_error_becomes_rag_backend_error() -> None:

@@ -12,13 +12,7 @@ from copilot_api.dynamo.chat_repository import (
     SessionNotFoundError,
 )
 from copilot_api.errors import not_found, service_unavailable
-from copilot_api.rag.prompt import (
-    REFUSAL_MESSAGE,
-    SYSTEM_PROMPT,
-    build_user_message,
-    filter_by_min_score,
-    make_citations,
-)
+from copilot_api.rag.pipeline import answer_question
 from copilot_api.rag.types import Generator, RagBackendError, Retriever
 from copilot_api.schemas import (
     ChatMessageCreateBody,
@@ -156,11 +150,7 @@ async def post_chat_message(
     await _append(repo, session_id, "user", body.content)
 
     try:
-        chunks = filter_by_min_score(await retriever.retrieve(body.content), settings.rag_min_score)
-        if not chunks:
-            refusal = await _append(repo, session_id, "assistant", REFUSAL_MESSAGE)
-            return _message_response(refusal)
-        answer = await generator.generate(SYSTEM_PROMPT, build_user_message(body.content, chunks))
+        answer = await answer_question(body.content, retriever, generator, settings.rag_min_score)
     except RagBackendError as exc:
         # request_id is attached to every log line by JsonFormatter.
         logger.warning(
@@ -172,6 +162,6 @@ async def post_chat_message(
         ) from exc
 
     assistant = await _append(
-        repo, session_id, "assistant", answer, citations=make_citations(chunks)
+        repo, session_id, "assistant", answer.text, citations=answer.citations
     )
     return _message_response(assistant)

@@ -21,12 +21,10 @@ across four inputs:
 
 ## Score bands and what they mean
 
-| Score    | Standing          | What it means                                                 |
-| -------- | ----------------- | ------------------------------------------------------------- |
-| 90-100   | Good standing     | Full selling privileges, eligible for featured placement.     |
-| 70-89    | Fair standing     | Full selling privileges, not eligible for featured placement. |
-| 50-69    | At risk           | Warning issued; seller must submit an improvement plan.       |
-| Below 50 | Suspension review | Selling paused pending manual review by Kestrel Market.       |
+- **90-100, Good standing:** Full selling privileges, eligible for featured placement.
+- **70-89, Fair standing:** Full selling privileges, not eligible for featured placement.
+- **50-69, At risk:** Warning issued; seller must submit an improvement plan.
+- **Below 50, Suspension review:** Selling paused pending manual review by Kestrel Market.
 
 ## Falling into "At risk"
 

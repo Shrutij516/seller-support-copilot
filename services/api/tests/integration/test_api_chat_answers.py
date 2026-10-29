@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from copilot_api.config import Settings, get_settings
 from copilot_api.main import app as fastapi_app
 from copilot_api.rag.prompt import REFUSAL_MESSAGE, SYSTEM_PROMPT
-from copilot_api.rag.types import RagBackendError, RetrievedChunk
+from copilot_api.rag.types import Generation, RagBackendError, RetrievedChunk
 from copilot_api.routers.chat import get_generator, get_retriever
 from tests.integration.conftest import TEST_CLIENT_ID, TEST_ISSUER, mint_token
 from tests.integration.factories import create_seller
@@ -45,11 +45,11 @@ class FakeGenerator:
     error: RagBackendError | None = None
     calls: list[tuple[str, str]] = field(default_factory=list)
 
-    async def generate(self, system_prompt: str, user_message: str) -> str:
+    async def generate(self, system_prompt: str, user_message: str) -> Generation:
         self.calls.append((system_prompt, user_message))
         if self.error is not None:
             raise self.error
-        return self.answer
+        return Generation(self.answer)
 
 
 @pytest.fixture
@@ -126,9 +126,9 @@ async def test_answer_with_citations_and_both_messages_persisted_in_order(
     body = response.json()
     assert body["role"] == "assistant"
     assert body["content"] == ANSWER
+    # Two chunks went to the model; the answer cites only [1], so only [1] comes back.
     assert [(c["index"], c["source"]) for c in body["citations"]] == [
         (1, "returns-and-refunds.md"),
-        (2, "fees.md"),
     ]
     assert body["citations"][0]["snippet"] == "R" * 300
 
@@ -190,7 +190,7 @@ async def test_chunks_below_min_score_are_dropped(
     response = _post(client, session_id, headers, QUESTION)
 
     assert response.status_code == 201
-    assert [c["source"] for c in response.json()["citations"]] == ["returns.md"]
+    assert len(generator.calls) == 1
     _, user_message = generator.calls[0]
     assert "Relevant refund policy." in user_message
     assert "Barely related fee text." not in user_message

@@ -6,6 +6,9 @@ INFRA_DIR := infra
 KB_STACK ?= KnowledgeBaseStack
 KB_REGION ?= us-east-1
 KB_DOCS_DIR := data/policies
+# Live RAG checks (eval-retrieval, rag-smoke) call Bedrock with your own AWS session via the
+# API's venv (botocore[crt] is a dev dependency, so `aws login` sessions work). Cost money.
+RAG_SMOKE_MODEL ?= us.anthropic.claude-haiku-4-5-20251001-v1:0
 # Scoped CloudFormation execution policy for `cdk bootstrap` (infra/bootstrap/README.md).
 # deploy-policy-* and cdk-bootstrap change real IAM/CloudFormation resources; run by hand only.
 CFN_EXEC_POLICY_NAME ?= copilot-cfn-exec
@@ -27,7 +30,7 @@ CLIENT_DIR := packages/api-client
 # Uses the pnpm version pinned in package.json via corepack (ships with Node 24).
 PNPM ?= corepack pnpm
 
-.PHONY: up down test test-integration lint typecheck migrate dynamodb-init seed coverage openapi openapi-check link-user api-client api-client-check kb-upload kb-ingest deploy-policy-create deploy-policy-update cdk-bootstrap
+.PHONY: up down test test-integration lint typecheck migrate dynamodb-init seed coverage openapi openapi-check link-user api-client api-client-check kb-upload kb-ingest deploy-policy-create deploy-policy-update cdk-bootstrap eval-retrieval rag-smoke eval-answers
 
 up: ## Start Postgres, DynamoDB Local, and the API; wait until healthy
 	docker compose up -d --build --wait
@@ -156,3 +159,30 @@ cdk-bootstrap: ## Bootstrap CDK in us-east-1 with the scoped execution policy in
 	account=$(aws_account); \
 	$(INFRA_DIR)/node_modules/.bin/cdk bootstrap "aws://$$account/$(KB_REGION)" \
 		--cloudformation-execution-policies "arn:aws:iam::$$account:policy/$(CFN_EXEC_POLICY_NAME)"
+
+eval-retrieval: ## Score live KB retrieval on evals/retrieval_golden.jsonl; writes evals/results/
+	@set -e; \
+	kb_id=$(call kb_output,KnowledgeBaseId); \
+	if [ -z "$$kb_id" ] || [ "$$kb_id" = "None" ]; then \
+		echo "No KnowledgeBaseId output on stack $(KB_STACK) in $(KB_REGION)." >&2; exit 1; \
+	fi; \
+	uv run --project $(API_DIR) python evals/calibrate_retrieval.py --kb-id "$$kb_id" --region $(KB_REGION)
+
+rag-smoke: ## One live answer through the route's RAG code path: make rag-smoke Q="question"
+	@if [ -z "$(Q)" ]; then echo 'Usage: make rag-smoke Q="your question"' >&2; exit 1; fi
+	@set -e; \
+	kb_id=$(call kb_output,KnowledgeBaseId); \
+	if [ -z "$$kb_id" ] || [ "$$kb_id" = "None" ]; then \
+		echo "No KnowledgeBaseId output on stack $(KB_STACK) in $(KB_REGION)." >&2; exit 1; \
+	fi; \
+	uv run --project $(API_DIR) python scripts/rag_smoke.py --kb-id "$$kb_id" --region $(KB_REGION) \
+		--model-id "$(RAG_SMOKE_MODEL)" --question "$(Q)"
+
+eval-answers: ## Run every golden question through the RAG pipeline and score answers; writes evals/results/
+	@set -e; \
+	kb_id=$(call kb_output,KnowledgeBaseId); \
+	if [ -z "$$kb_id" ] || [ "$$kb_id" = "None" ]; then \
+		echo "No KnowledgeBaseId output on stack $(KB_STACK) in $(KB_REGION)." >&2; exit 1; \
+	fi; \
+	uv run --project $(API_DIR) python evals/answer_eval.py --kb-id "$$kb_id" --region $(KB_REGION) \
+		--model-id "$(RAG_SMOKE_MODEL)"
