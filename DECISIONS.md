@@ -284,6 +284,22 @@ build; don't let it drift from the code.
 - Tradeoff we accept: Most off-topic questions (6/10 here) still reach the model and rely on the prompt to decline. At about 2,000 input and 70 output tokens per question (answers eval: 60,756 / 2,056 tokens over 30 questions), each costs roughly $0.003 at Haiku 4.5's Geo on-demand price. That's an estimate, and abuse at volume is a rate-limiting problem, not a threshold one. The margin under the weakest real question is thin (0.584 vs 0.55), and 20 author-written questions is a small sample.
 - Revisit if: Real seller questions arrive (re-run the calibration on them), the embedding model or chunking changes, or the answer eval's out-of-scope refusals regress (the prompt is doing the work, so that's where to look first).
 
+## Chat: request/response, not streaming
+
+- Status: In use (phase 5a, branch `feat/web-chat-send`). `apps/web/src/components/chat/ChatThread.tsx` and `useSendChatMessage` in `apps/web/src/lib/api/hooks.ts`.
+- What it does: The web chat sends a message with one `POST /v1/chat/sessions/{id}/messages` through the generated client and renders the whole assistant answer when the response arrives.
+  - **While waiting:** the user's message appears immediately (an optimistic cache entry), Send is disabled, and a status line says the assistant is answering.
+  - **Citations:** listed under each answer as `[n]` source file plus snippet, collapsed in a `<details>` element. An answer with no citations renders no citation block.
+  - **503:** shows "The assistant is temporarily unavailable.", keeps the typed question, and offers Retry.
+  - **404:** says the session is gone.
+  - **Other errors:** use the existing problem+json message mapping.
+  - **Validation:** 1–2,000 characters after trimming, mirroring the API, which stays the source of truth.
+  - **Accessibility:** a dedicated `aria-live` region announces each new answer once, the textarea is labeled, Enter sends and Shift+Enter adds a newline. Nothing is sent mid-IME composition.
+- Why we chose it: Answers are short and fast. The live smoke run measured retrieve at 440 ms and Converse at 1,037 ms, about 1.5 s end to end for a full grounded answer. A spinner for about 1.5 s is acceptable, and request/response keeps every existing piece unchanged: the generated client, problem+json errors, the static-export frontend, the API's synchronous route and its tests, and storing the whole answer with its citations in one write. Citations are filtered from the complete answer text (only `[n]` actually cited), which is simplest when the whole answer is in hand.
+- Rejected alternative: Server-Sent Events streaming (Converse's `ConverseStream`). Text would appear incrementally, but it needs a streaming endpoint and client, a different error model mid-stream (a 503 after half an answer), citation filtering only at the end, a second storage path for partial answers, and proxy and CloudFront configuration that buffers or times out streams. That's a lot of moving parts to save about 1 second.
+- Tradeoff we accept: A spinner instead of incremental text. If answers get longer, or latency grows (bigger parents, larger models), the wait becomes noticeable. Also, on a 503 the API has already stored the question, so pressing Retry stores it a second time: the thread can show the same question twice, once without an answer. That's honest about what the server recorded, and acceptable while 503s are rare.
+- Revisit if: p95 end-to-end latency rises past about 3 s, answers routinely run several paragraphs, or the 503 duplicate-question pattern shows up in real use (then make the retry idempotent server-side).
+
 ## Eval harness
 
 - Status: Planned (phase 5)
@@ -516,4 +532,18 @@ build; don't let it drift from the code.
 - Evidence: The chain's output shows `make: *** [up] Error 1` followed by later steps running, and then `ERROR at setup of test_readyz_503_names_failed_dependency`. `git log` still showed the previous commit (`6e7e968`), and `git status` listed the uncommitted files.
 - Fix: Verify-and-commit chains now start with `set -o pipefail`. With Docker Hub unreachable, the integration tests ran against `docker compose up -d --wait postgres dynamodb-local` (cached images, no build). The tests use the in-process app, not the API container. Everything passed, and only then was the commit made.
 - Lesson: `&&` only guards what it can see. Piping to `tail` or `grep` hides exit codes unless `pipefail` is set. This extends the 4b lesson ("chain with &&") to "chain with && under pipefail".
+
+### 2026-10-29: grep hit a regex complexity limit while scanning README.md
+
+- Symptom: During the secret scan behind commit `49a7d46` (on `feat/kb-hierarchical-chunking`), the grep used to show email-hit context in `README.md` failed with `ugrep: error: ... exceeds complexity limits`.
+- Root cause: The shell's `grep` is ugrep, and a context pattern (`.{0,50}...{0,10}` around an email regex) exceeded its regex complexity limit on that file. Different files hit different engine limits.
+- Evidence: The ugrep error output for `README.md`. The `DECISIONS.md` context grep in the same command, a different pattern, ran fine. The email-context pattern only ever ran on `README.md`.
+- Fix: Switched that check to Python `re`. The retroactive scan then used one Python scanner, with a planted-positive control, for every file.
+- Lesson: Use one scanner implementation (Python) for all files, so behavior and limits are the same everywhere and a failure can't masquerade as a result.
+
+## Known open issues
+
+Not yet fixed. Each needs its own reviewed phase.
+
+- **Nobody can log in yet:** the Cognito User Pool isn't deployed. The web app's sign-in (`oidc-client-ts`) and the API's JWT verification are implemented and tested against minted tokens, but no real user pool exists. The chat page, like every authenticated page, can't be used end to end until Cognito is provisioned and `COGNITO_*` / `NEXT_PUBLIC_*` are configured.
 
