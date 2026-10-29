@@ -10,9 +10,10 @@ def test_policy_docs_exist() -> None:
 
 
 def test_policy_docs_contain_no_markdown_tables() -> None:
-    # The KB's default parsing kept every table-containing file as one oversized chunk
-    # (~600-720 tokens despite 300-token FIXED_SIZE chunking); converting a table to a list
-    # split it normally. Write tabular facts as bullet lists. See DECISIONS.md Incidents.
+    # For .md pages containing a table, Bedrock replaces a matching chunk with the full page or
+    # table at retrieval (kb-chunking.html, "Tables and figures in parsed content"), so these
+    # short docs came back whole (~600-720 tokens). Write tabular facts as bullet lists.
+    # See DECISIONS.md, "Policy docs avoid markdown tables" and the Incidents entry.
     offenders = [
         f"{path.name}:{n}: {line.strip()[:60]}"
         for path in sorted(POLICIES_DIR.glob("*.md"))
