@@ -1,0 +1,144 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "KbStackRoleLifecycle",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:GetRole",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:UpdateRoleDescription",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:GetRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies",
+        "iam:TagRole",
+        "iam:UntagRole"
+      ],
+      "Resource": "arn:aws:iam::*:role/KnowledgeBaseStack-*",
+      "Condition": {
+        "StringEquals": { "aws:RequestedRegion": "us-east-1" }
+      }
+    },
+    {
+      "Sid": "KbStackRolePassToBedrockOnly",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::*:role/KnowledgeBaseStack-*",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "bedrock.amazonaws.com",
+          "aws:RequestedRegion": "us-east-1"
+        }
+      }
+    },
+    {
+      "Sid": "KbStackDocsBucket",
+      "Effect": "Allow",
+      "Action": [
+        "s3:CreateBucket",
+        "s3:DeleteBucket",
+        "s3:ListBucket",
+        "s3:GetBucketAcl",
+        "s3:PutEncryptionConfiguration",
+        "s3:PutBucketPublicAccessBlock",
+        "s3:PutBucketTagging",
+        "s3:TagResource",
+        "s3:UntagResource",
+        "s3:GetBucketPolicy",
+        "s3:PutBucketPolicy",
+        "s3:DeleteBucketPolicy",
+        "s3:GetAccelerateConfiguration",
+        "s3:GetLifecycleConfiguration",
+        "s3:GetBucketPublicAccessBlock",
+        "s3:GetAnalyticsConfiguration",
+        "s3:GetBucketCORS",
+        "s3:GetEncryptionConfiguration",
+        "s3:GetInventoryConfiguration",
+        "s3:GetBucketLogging",
+        "s3:GetMetricsConfiguration",
+        "s3:GetBucketNotification",
+        "s3:GetBucketVersioning",
+        "s3:GetReplicationConfiguration",
+        "s3:GetBucketWebsite",
+        "s3:GetBucketObjectLockConfiguration",
+        "s3:GetBucketTagging",
+        "s3:ListTagsForResource",
+        "s3:GetBucketAbac",
+        "s3:GetBucketOwnershipControls",
+        "s3:GetIntelligentTieringConfiguration",
+        "s3:GetBucketMetadataTableConfiguration",
+        "s3:GetBucketDefaultStorageClass"
+      ],
+      "Resource": "arn:aws:s3:::knowledgebasestack-*",
+      "Condition": {
+        "StringEquals": { "aws:RequestedRegion": "us-east-1" }
+      }
+    },
+    {
+      "Sid": "KbStackVectorBucket",
+      "Effect": "Allow",
+      "Action": [
+        "s3vectors:CreateVectorBucket",
+        "s3vectors:GetVectorBucket",
+        "s3vectors:DeleteVectorBucket",
+        "s3vectors:TagResource",
+        "s3vectors:UntagResource",
+        "s3vectors:ListTagsForResource"
+      ],
+      "Resource": "arn:aws:s3vectors:us-east-1:*:bucket/*",
+      "Condition": {
+        "StringEquals": { "aws:RequestedRegion": "us-east-1" }
+      }
+    },
+    {
+      "Sid": "KbStackVectorIndex",
+      "Effect": "Allow",
+      "Action": [
+        "s3vectors:CreateIndex",
+        "s3vectors:GetIndex",
+        "s3vectors:DeleteIndex",
+        "s3vectors:TagResource",
+        "s3vectors:UntagResource",
+        "s3vectors:ListTagsForResource"
+      ],
+      "Resource": "arn:aws:s3vectors:us-east-1:*:bucket/*/index/*",
+      "Condition": {
+        "StringEquals": { "aws:RequestedRegion": "us-east-1" }
+      }
+    },
+    {
+      "Sid": "KbStackKnowledgeBaseAndDataSource",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:GetKnowledgeBase",
+        "bedrock:UpdateKnowledgeBase",
+        "bedrock:DeleteKnowledgeBase",
+        "bedrock:ListDataSources",
+        "bedrock:CreateDataSource",
+        "bedrock:GetDataSource",
+        "bedrock:UpdateDataSource",
+        "bedrock:DeleteDataSource",
+        "bedrock:TagResource",
+        "bedrock:UntagResource",
+        "bedrock:ListTagsForResource"
+      ],
+      "Resource": "arn:aws:bedrock:us-east-1:*:knowledge-base/*",
+      "Condition": {
+        "StringEquals": { "aws:RequestedRegion": "us-east-1" }
+      }
+    },
+    {
+      "Sid": "CreateKnowledgeBaseNoResourceLevelSupport",
+      "Effect": "Allow",
+      "Action": "bedrock:CreateKnowledgeBase",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": { "aws:RequestedRegion": "us-east-1" }
+      }
+    }
+  ]
+}
