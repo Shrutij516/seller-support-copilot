@@ -89,7 +89,7 @@ build; don't let it drift from the code.
 
 ## Cognito
 
-- Status: In use (token verification code); the actual User Pool isn't deployed yet
+- Status: Defined in CDK (6a): `infra/lib/auth-stack.ts` (`AuthStack`, us-east-1). Token verification code is in use in the API. The User Pool **isn't deployed** yet; deploying it is the owner's step after review.
 - What it does: Issues JWTs with a `cognito:groups` claim (seller or admin). Authorization, what each role can actually do, is enforced in our API code, not by Cognito.
 - Why we chose it: Managed auth with native AWS integration; I don't build or store passwords myself.
 - Rejected alternative: Custom auth (JWT plus a users table). More code to secure and maintain for something Cognito already does.
@@ -217,6 +217,7 @@ build; don't let it drift from the code.
   - **Explicit vector names:** `KnowledgeBaseStack` names its vector bucket `seller-copilot-kb-vectors` and its index `seller-policies`. CloudFormation's generated vector names have no documented prefix, so without explicit names the policy could only cover every vector bucket in the region. With them, the S3 Vectors statements grant on those two exact ARNs. The cost: **one stack per account and region**, since vector bucket names are unique there and a second copy would collide. Also, these resources can't be replaced in place, so a new dimension or metric means a new index name plus a policy update in the same diff.
   - **No account wildcards:** every ARN's account field is an `{{ACCOUNT_ID}}` placeholder. IAM policy variables like `${aws:PrincipalAccount}` aren't allowed before the fifth colon of an ARN, which is where the account field is. `make deploy-policy-*` renders the caller's account into a temp file at create time, so the account ID is never committed. The cost: the committed JSON isn't directly usable with `aws iam create-policy`; it has to go through the Makefile, and the test checks it renders cleanly.
   - **Shared execution role:** the bootstrap is per account and region, so `BudgetStack` can no longer be deployed through it (it was always a manual deploy).
+- `AuthStack` (phase 6a): widened by 22 `cognito-idp:` actions taken from the four Cognito resource types' handler permissions. 20 are scoped to `arn:aws:cognito-idp:us-east-1:{{ACCOUNT_ID}}:userpool/*`; `CreateUserPool` and `DescribeUserPoolDomain` are on `*`, because the Service Authorization Reference lists no resource type for them. KMS, IAM role and CloudFront handler actions are excluded (no CMK, SMS role, Lambda trigger or custom domain). Tests cover the actions, their scope and `AuthStack`'s resource types. See `infra/bootstrap/README.md`, "AuthStack (Cognito)".
 - Future stacks: **any new stack, resource type or property that needs a new permission must widen this policy explicitly in a reviewed diff.** That means updating `cfn-exec-policy.json`, the README's sources and exceptions, and `REVIEWED_RESOURCE_TYPES` in the test, then running `make deploy-policy-update`. Falling back to `AdministratorAccess`, even "temporarily", isn't an option.
 - Revisit if: We add several stacks with very different needs (then one execution policy per bootstrap qualifier), or move deploys to CI (then the CI role's own permissions need the same review).
 
@@ -343,6 +344,33 @@ build; don't let it drift from the code.
   - **Different transaction shapes:** sending is two transactions (question, then answer) instead of two plain appends, and replay handling reads `CancellationReasons`.
   - **Wasted generation in a race:** if two retries run concurrently before either records an answer, both call the model and only the first answer is kept.
 - Revisit if: clients need cross-session or cross-device dedup (then the key needs a different scope), or replays become common enough that the follow-up read matters.
+
+## No self sign-up (invite-only Cognito users)
+
+- Status: Defined in CDK (6a). `AuthStack` sets `selfSignUpEnabled: false` (`AllowAdminCreateUserOnly: true`), pinned by a Jest test that was negative-tested.
+- What it does: Nobody can create their own account. An operator creates each user with `make auth-create-user EMAIL=... GROUP=seller|admin`. That target calls `admin-create-user` with `--message-action SUPPRESS`, reads a temporary password with echo off and sends it on stdin (never echoed, never in a file or argument list), then adds the user to the group. Users set their own password at first sign-in. A seller user is then linked to a seller row with `make link-user`.
+- Why we chose it: Every signed-in seller can ask the chat, and every question costs Bedrock tokens. Open sign-up would let anyone on the internet create accounts and spend money on retrieval and generation, and there's no rate limiting yet ("Cut or deferred": rate limiting deferred). This is a demo with a handful of known users, so invite-only matches reality and caps spend.
+- Rejected alternative: Open self sign-up with email verification. Lower friction, but it invites bot sign-ups and abuse of the Bedrock-backed chat, and a seller account also needs a matching `sellers` row, which self sign-up wouldn't create anyway.
+- Tradeoff we accept: Every new user needs an operator with AWS credentials. There's no "Sign up" link on the hosted UI.
+- Revisit if: There's a real onboarding flow (seller verification, billing), together with rate limiting on the chat endpoint.
+
+## TOTP-only MFA
+
+- Status: Defined in CDK (6a). MFA `OPTIONAL`, enabled MFA type `SOFTWARE_TOKEN_MFA` only, pinned by a Jest test.
+- What it does: Users can enrol an authenticator app (TOTP) as a second factor. SMS MFA isn't enabled, and the pool has no SMS configuration or SNS role.
+- Why we chose it: TOTP is free and works on the Lite plan ("MFA with authenticator apps and SMS one-time codes" is Lite, Essentials and Plus: https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-sign-in-feature-plans.html#cognito-sign-in-feature-plans-list). SMS MFA is billed per message through Amazon SNS, outside the MAU price (https://aws.amazon.com/cognito/pricing/), and needs an IAM role for Cognito to publish to SNS. That means more cost, more IAM and more execution-policy surface, plus SIM-swap risk.
+- Rejected alternative: SMS MFA, for the cost, IAM and security reasons above. Also rejected: making MFA required, which is friction a demo with invited users doesn't need yet.
+- Tradeoff we accept: MFA is optional, so accounts without TOTP rely on the password alone, under a strong policy (12+ characters, upper, lower, digit and symbol). There's no fallback factor for users without an authenticator app.
+- Revisit if: Real sellers onboard (then make MFA required), or a user population can't use authenticator apps.
+
+## Cognito feature plan: Lite with the classic hosted UI
+
+- Status: Defined in CDK (6a). `featurePlan: FeaturePlan.LITE` (`UserPoolTier: LITE`), and the domain uses `managedLoginVersion: CLASSIC_HOSTED_UI` (`ManagedLoginVersion: 1`) on a Cognito prefix domain `seller-copilot-<account id>`.
+- What it does: Uses the cheapest user pool feature plan, with the classic hosted UI for sign-in and sign-out pages.
+- Why we chose it: Lite includes everything this app uses: user groups, the OAuth 2.0/OIDC authorization server (code grant), password sign-in, TOTP MFA and hosted login pages. "The classic hosted UI is available in all feature tiers", while "managed login is available in the Essentials and Plus tiers" (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-sign-in-feature-plans.html). New pools **default to Essentials** unless the plan is set, so Lite is set explicitly. Managed login on a programmatically created app client also needs a separate `ManagedLoginBranding` resource before its pages render ("Managed login isn't available for an app client created with an AWS SDK until you create one": https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pools-managed-login.html). That's one more resource and more execution-policy surface for a nicer login page we don't need. Pricing (https://aws.amazon.com/cognito/pricing/, as summarized on 2026-10-29): Lite and Essentials both include **10,000 MAUs per month free**, and the page says this "does not automatically expire" after the 12-month free tier. Above that, Lite was listed at about $0.0055 per MAU, Essentials $0.015 and Plus $0.020, and Plus has no free tier. At demo scale (a handful of users), Lite and Essentials are both $0. Lite is cheapest if it ever grows, and it carries no features we'd have to remember to keep off.
+- Rejected alternative: Essentials with managed login. Nicer pages, passkeys, email MFA and access-token customization, but we use none of those, it adds a branding resource, and it costs about 3x per MAU above the free tier. Also rejected: Plus, which adds threat protection we don't need and has no free tier.
+- Tradeoff we accept: The classic hosted UI looks dated and has fewer customization options, with no passkeys, email MFA or access-token customization. Switching plans later is possible without recreating the pool.
+- Revisit if: We need passkeys, email MFA, access-token claim customization, or branded login pages.
 
 ## Eval harness
 
@@ -796,6 +824,7 @@ Not yet fixed. Each needs a decision or a change in its own reviewed phase.
 - **Stale README:** the README's general Results table and layout rows are out of date. They say 83 backend tests and 90% coverage, `evals` is "placeholder", and `infra` is "`BudgetStack` only". Only the RAG Results subsection is current.
 - **PR #3's description is wrong:** it still says "16/16 pass, 11 of them new"; the actual split was 10 new and 6 existing. PR #3 is merged; the correction of record is in Incidents, "PR #3's description misstates the Jest split".
 - **Nobody can log in yet:** the Cognito User Pool isn't deployed. The web app's sign-in (`oidc-client-ts`) and the API's JWT verification are implemented and tested against minted tokens, but no real user pool exists. The chat page, like every authenticated page, can't be used end to end until Cognito is provisioned and `COGNITO_*` / `NEXT_PUBLIC_*` are configured.
+- **Concurrent identical retries can call the model twice:** if two requests with the same `client_message_id` both arrive before an answer is recorded, both run retrieval and generation. Only the first answer is stored, and both callers get it back. That costs one extra model call in a rare race. Accepted; see "Idempotent message send" (PR #9).
 
 ## Resolved issues
 

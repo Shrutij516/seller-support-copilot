@@ -1,6 +1,6 @@
 # CloudFormation execution policy for CDK bootstrap
 
-`cfn-exec-policy.json` is the only IAM policy CloudFormation gets when deploying CDK stacks in this account. It's attached to the bootstrap's `CloudFormationExecutionRole` via `cdk bootstrap --cloudformation-execution-policies`, instead of the default `AdministratorAccess`. It covers **`KnowledgeBaseStack` only**. Any other stack deployed with this bootstrap fails with AccessDenied until this policy is widened in a reviewed diff (see DECISIONS.md, "Scoped CloudFormation execution policy instead of default AdministratorAccess bootstrap").
+`cfn-exec-policy.json` is the only IAM policy CloudFormation gets when deploying CDK stacks in this account. It's attached to the bootstrap's `CloudFormationExecutionRole` via `cdk bootstrap --cloudformation-execution-policies`, instead of the default `AdministratorAccess`. It covers **`KnowledgeBaseStack` and `AuthStack` only**. Any other stack deployed with this bootstrap fails with AccessDenied until this policy is widened in a reviewed diff (see DECISIONS.md, "Scoped CloudFormation execution policy instead of default AdministratorAccess bootstrap").
 
 `infra/test/cfn-exec-policy.test.ts` enforces the rules below. That test also fails if `KnowledgeBaseStack` gains a resource type this policy hasn't been reviewed for.
 
@@ -29,7 +29,7 @@ Why not `${aws:PrincipalAccount}`: IAM allows policy variables in `Resource` "on
 4. **Region lock:** every statement requires `aws:RequestedRegion = us-east-1`. It's a global condition key present on every request, including IAM, whose requests resolve to us-east-1: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_condition-keys.html#condition-keys-requestedregion
 5. **Pass-role restriction:** `iam:PassRole` is limited to `iam:PassedToService = bedrock.amazonaws.com`: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_iam-condition-keys.html#ck_PassedToService
 
-All 67 resource actions appear in those handler lists. The one action not from a handler list is `ssm:GetParameters` on the CDK bootstrap version parameter (see "Template parameters" below), for 68 in total.
+All 67 `KnowledgeBaseStack` resource actions appear in those handler lists. The one action not from a handler list is `ssm:GetParameters` on the CDK bootstrap version parameter (see "Template parameters" below). That makes 68 for `KnowledgeBaseStack`. `AuthStack` adds 22 Cognito actions (see "AuthStack (Cognito)" below), for 90 in total.
 
 ## Template parameters
 
@@ -41,7 +41,28 @@ CloudFormation resolves every `AWS::SSM::Parameter::Value<...>` template paramet
 |---|---|---|
 | `bedrock:CreateKnowledgeBase` | The action defines no resource type; the KB ARN doesn't exist until the call returns. Region-locked like everything else. | [Bedrock SAR](https://docs.aws.amazon.com/service-authorization/latest/reference/list_amazonbedrock.html): `CreateKnowledgeBase` has an empty "Resource types" column. Machine-readable copy: `bedrock.json`, which has no `Resources` key for it. |
 
-That's the only one. Every other granted action supports a resource ARN and is scoped to one.
+| `cognito-idp:CreateUserPool` | No resource type: the pool's ARN doesn't exist until the call returns. Region-locked. | [Cognito user pools SAR](https://docs.aws.amazon.com/service-authorization/latest/reference/list_amazoncognitouserpools.html): empty "Resource types" for `CreateUserPool` (machine-readable `cognito-idp.json`: no `Resources` key). |
+| `cognito-idp:DescribeUserPoolDomain` | No resource type: it's looked up by domain name, not pool ARN. Region-locked. | Same SAR: empty "Resource types" for `DescribeUserPoolDomain`. |
+
+Those three are the only ones. Every other granted action supports a resource ARN and is scoped to one.
+
+## AuthStack (Cognito)
+
+- **Resource types** (synthesized `AuthStack`): `AWS::Cognito::UserPool`, `AWS::Cognito::UserPoolClient`, `AWS::Cognito::UserPoolGroup`, `AWS::Cognito::UserPoolDomain`.
+- **Candidate actions:** the `handlers.{create,read,update,delete}.permissions` of `aws-cognito-userpool.json`, `aws-cognito-userpoolclient.json`, `aws-cognito-userpoolgroup.json` and `aws-cognito-userpooldomain.json` in the [CloudFormation schema bundle](https://schema.cloudformation.us-east-1.amazonaws.com/CloudformationSchema.zip). Template Reference pages:
+  - https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-cognito-userpool.html
+  - https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-cognito-userpoolclient.html
+  - https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-cognito-userpoolgroup.html
+  - https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-cognito-userpooldomain.html
+- **Granted:** 22 `cognito-idp:` actions. 20 are scoped to `arn:aws:cognito-idp:us-east-1:{{ACCOUNT_ID}}:userpool/*` (statement `AuthStackUserPool`); `CreateUserPool` and `DescribeUserPoolDomain` are on `*` (statement `AuthStackNoResourceLevelSupport`; see the table above). Resource-level support was checked per action in the [Cognito user pools SAR](https://docs.aws.amazon.com/service-authorization/latest/reference/list_amazoncognitouserpools.html), whose ARN format is `arn:${Partition}:cognito-idp:${Region}:${Account}:userpool/${UserPoolId}`.
+- **Left out:**
+  - **KMS actions:** no customer-managed key.
+  - **`iam:PassRole`, `iam:PutRolePolicy`, `iam:DeleteRolePolicy`, `iam:CreateServiceLinkedRole`:** these serve SMS roles, Lambda triggers and analytics, none of which `AuthStack` has. SMS MFA is off and there are no triggers.
+  - **`cloudfront:updateDistribution`:** only for custom domains; this is a Cognito prefix domain.
+  - **`cognito-idp:AddCustomAttributes`:** no custom attributes.
+
+  If `AuthStack` adds any of these features, the first deploy fails with AccessDenied and this policy must be widened in a reviewed diff.
+- **Scope note:** `userpool/*` covers every user pool in the account and region, because pool ids are generated. There's no predictable name to scope to, unlike the S3 Vectors resources.
 
 ## Resource scoping and naming
 

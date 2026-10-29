@@ -141,6 +141,45 @@
       }
     },
     {
+      "Sid": "AuthStackUserPool",
+      "Effect": "Allow",
+      "Action": [
+        "cognito-idp:DescribeUserPool",
+        "cognito-idp:UpdateUserPool",
+        "cognito-idp:DeleteUserPool",
+        "cognito-idp:SetUserPoolMfaConfig",
+        "cognito-idp:GetUserPoolMfaConfig",
+        "cognito-idp:TagResource",
+        "cognito-idp:UntagResource",
+        "cognito-idp:ListTagsForResource",
+        "cognito-idp:CreateUserPoolClient",
+        "cognito-idp:DescribeUserPoolClient",
+        "cognito-idp:UpdateUserPoolClient",
+        "cognito-idp:DeleteUserPoolClient",
+        "cognito-idp:ListUserPoolClientSecrets",
+        "cognito-idp:CreateGroup",
+        "cognito-idp:GetGroup",
+        "cognito-idp:UpdateGroup",
+        "cognito-idp:DeleteGroup",
+        "cognito-idp:CreateUserPoolDomain",
+        "cognito-idp:UpdateUserPoolDomain",
+        "cognito-idp:DeleteUserPoolDomain"
+      ],
+      "Resource": "arn:aws:cognito-idp:us-east-1:{{ACCOUNT_ID}}:userpool/*",
+      "Condition": {
+        "StringEquals": { "aws:RequestedRegion": "us-east-1" }
+      }
+    },
+    {
+      "Sid": "AuthStackNoResourceLevelSupport",
+      "Effect": "Allow",
+      "Action": ["cognito-idp:CreateUserPool", "cognito-idp:DescribeUserPoolDomain"],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": { "aws:RequestedRegion": "us-east-1" }
+      }
+    },
+    {
       "Sid": "CreateKnowledgeBaseNoResourceLevelSupport",
       "Effect": "Allow",
       "Action": "bedrock:CreateKnowledgeBase",

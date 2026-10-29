@@ -10,6 +10,7 @@ import {
   VECTOR_BUCKET_NAME,
   VECTOR_INDEX_NAME,
 } from "../lib/knowledge-base-stack";
+import { AUTH_REGION, AuthStack } from "../lib/auth-stack";
 
 interface Statement {
   readonly Sid?: string;
@@ -32,7 +33,50 @@ const DOCS_BUCKET_PATTERN = "arn:aws:s3:::knowledgebasestack-*";
 
 // Actions AWS gives no resource-level permissions for, each with its proof in
 // bootstrap/README.md. Adding to this list is a reviewed decision, not a test fix.
-const RESOURCE_STAR_ALLOWED = new Set(["bedrock:CreateKnowledgeBase"]);
+const RESOURCE_STAR_ALLOWED = new Set([
+  "bedrock:CreateKnowledgeBase",
+  "cognito-idp:CreateUserPool",
+  "cognito-idp:DescribeUserPoolDomain",
+]);
+
+const USER_POOL_PATTERN = `arn:aws:cognito-idp:us-east-1:${"{{ACCOUNT_ID}}"}:userpool/*`;
+
+// cognito-idp actions from the CloudFormation handler permissions (create/read/update/delete)
+// of AWS::Cognito::UserPool, UserPoolClient, UserPoolGroup and UserPoolDomain, minus actions
+// for features AuthStack doesn't use (AddCustomAttributes: no custom attributes). Non-Cognito
+// handler actions (kms:*, iam:PassRole/PutRolePolicy/CreateServiceLinkedRole,
+// cloudfront:updateDistribution) are for CMKs, SMS/Lambda roles and custom domains: not used.
+const AUTH_STACK_REQUIRED_ACTIONS = [
+  "cognito-idp:CreateUserPool",
+  "cognito-idp:DescribeUserPool",
+  "cognito-idp:UpdateUserPool",
+  "cognito-idp:DeleteUserPool",
+  "cognito-idp:SetUserPoolMfaConfig",
+  "cognito-idp:GetUserPoolMfaConfig",
+  "cognito-idp:TagResource",
+  "cognito-idp:UntagResource",
+  "cognito-idp:ListTagsForResource",
+  "cognito-idp:CreateUserPoolClient",
+  "cognito-idp:DescribeUserPoolClient",
+  "cognito-idp:UpdateUserPoolClient",
+  "cognito-idp:DeleteUserPoolClient",
+  "cognito-idp:ListUserPoolClientSecrets",
+  "cognito-idp:CreateGroup",
+  "cognito-idp:GetGroup",
+  "cognito-idp:UpdateGroup",
+  "cognito-idp:DeleteGroup",
+  "cognito-idp:CreateUserPoolDomain",
+  "cognito-idp:DescribeUserPoolDomain",
+  "cognito-idp:UpdateUserPoolDomain",
+  "cognito-idp:DeleteUserPoolDomain",
+];
+
+const AUTH_STACK_REVIEWED_TYPES = [
+  "AWS::Cognito::UserPool",
+  "AWS::Cognito::UserPoolClient",
+  "AWS::Cognito::UserPoolDomain",
+  "AWS::Cognito::UserPoolGroup",
+];
 
 // Resource types this policy has been reviewed against. A new type in KnowledgeBaseStack
 // (or a deliberately-widened policy) has to be added here in the same reviewed diff.
@@ -240,6 +284,36 @@ describe("CloudFormation execution policy (bootstrap/cfn-exec-policy.json)", () 
           ),
       );
     expect(unreadable).toEqual([]);
+  });
+
+  test("covers every cognito-idp action AuthStack's resources need", () => {
+    const granted = new Set(statements.flatMap((s) => actionsOf(s)));
+    const missing = AUTH_STACK_REQUIRED_ACTIONS.filter((a) => !granted.has(a));
+    expect(missing).toEqual([]);
+  });
+
+  test("cognito-idp actions are only on the user pool pattern or documented Resource * actions", () => {
+    const offenders: string[] = [];
+    for (const s of statements) {
+      for (const action of actionsOf(s).filter((a) => a.startsWith("cognito-idp:"))) {
+        const resources = resourcesOf(s);
+        const ok =
+          (resources.length === 1 && resources[0] === USER_POOL_PATTERN) ||
+          (resources.length === 1 && resources[0] === "*" && RESOURCE_STAR_ALLOWED.has(action));
+        if (!ok) offenders.push(`${s.Sid}: ${action} on ${resources.join(",")}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  test("AuthStack uses only resource types this policy was reviewed for", () => {
+    const app = new App();
+    const stack = new AuthStack(app, "PolicyReviewAuthStack", { env: { region: AUTH_REGION } });
+    const resources = Template.fromStack(stack).toJSON().Resources as Record<string, { Type: string }>;
+    const types = [...new Set(Object.values(resources).map((r) => r.Type))]
+      .filter((t) => t !== "AWS::CDK::Metadata")
+      .sort();
+    expect(types).toEqual(AUTH_STACK_REVIEWED_TYPES);
   });
 
   test("KnowledgeBaseStack uses only resource types this policy was reviewed for", () => {
