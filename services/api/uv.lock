@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = "==3.12.*"
 
 [[package]]
@@ -119,6 +119,12 @@ wheels = [
 ]
 
 [package.optional-dependencies]
+bedrock-agent-runtime = [
+    { name = "mypy-boto3-bedrock-agent-runtime" },
+]
+bedrock-runtime = [
+    { name = "mypy-boto3-bedrock-runtime" },
+]
 dynamodb = [
     { name = "mypy-boto3-dynamodb" },
 ]
@@ -215,7 +221,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "boto3-stubs", extra = ["dynamodb"] },
+    { name = "boto3-stubs", extra = ["bedrock-agent-runtime", "bedrock-runtime", "dynamodb"] },
     { name = "faker" },
     { name = "mypy" },
     { name = "pytest" },
@@ -240,7 +246,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "boto3-stubs", extras = ["dynamodb"], specifier = ">=1.40.0" },
+    { name = "boto3-stubs", extras = ["dynamodb", "bedrock-agent-runtime", "bedrock-runtime"], specifier = ">=1.40.0" },
     { name = "faker", specifier = ">=33.0.0" },
     { name = "mypy", specifier = ">=2.3.1" },
     { name = "pytest", specifier = ">=9.1.1" },
@@ -509,6 +515,24 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/a3/52/cb31e084bc0314a1e384bdd677a4b80e55af04ccac077545e2238b9d320a/mypy-2.3.1-cp312-cp312-win_amd64.whl", hash = "sha256:4c5095a327483591c94e0c8d3ef9e50d4ab1369b541eae007c1f23bc2a41f6bb", size = 11226359, upload-time = "2026-08-15T03:03:29.002Z" },
     { url = "https://files.pythonhosted.org/packages/7a/47/88fcf6217b43fa2da81a8c2611370af18141536a4f0294bbf98b457d456d/mypy-2.3.1-cp312-cp312-win_arm64.whl", hash = "sha256:bbfe022634a2a195406bd469e888d2eaf193b02ba7e607391cd7640374aaae3b", size = 10214707, upload-time = "2026-08-15T03:02:48.807Z" },
     { url = "https://files.pythonhosted.org/packages/8e/41/9675c7a1e78edecfba0b79e587a52594c56e189368261dc7b3a7fffb9527/mypy-2.3.1-py3-none-any.whl", hash = "sha256:6ed5c7e3419083268e5c9258bd1c1ef91af44a9e89374dbcaf37b775716e72eb", size = 2754338, upload-time = "2026-08-15T03:02:53.4Z" },
+]
+
+[[package]]
+name = "mypy-boto3-bedrock-agent-runtime"
+version = "1.43.115"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/06/a4/2d82f626bf18779a6be2643aabed9f572293ec0b9206811ccf5b008991df/mypy_boto3_bedrock_agent_runtime-1.43.115.tar.gz", hash = "sha256:de24b7b46a97956465a8e3029020b006739790853b5baa6fb9ccfcb439d12d58", size = 47187, upload-time = "2026-10-19T20:43:03.416Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0a/ac/51d541824d4e317176d16bdd557f7a57c18af71e5d88a3985050dba7855e/mypy_boto3_bedrock_agent_runtime-1.43.115-py3-none-any.whl", hash = "sha256:9e4beca9c30fd1f5adb758db9b371a77135d970e726bf28c603afa2624e23364", size = 56896, upload-time = "2026-10-19T20:43:02.109Z" },
+]
+
+[[package]]
+name = "mypy-boto3-bedrock-runtime"
+version = "1.43.62"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/26/78/542f5804cf0f9e3c1ccbf30917eaa3b4b6002b91965de02d065d7441fc93/mypy_boto3_bedrock_runtime-1.43.62.tar.gz", hash = "sha256:beb70b08ef72cdfd5036bcd3270f2fbac0a2ce5e40f70dfc1d87c4f139d4d7ff", size = 31492, upload-time = "2026-07-31T19:54:15.291Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d9/b2/e3bff20acd290b909f1c28856d6d8d7984f7f7d5bda299d5957f64e97bb3/mypy_boto3_bedrock_runtime-1.43.62-py3-none-any.whl", hash = "sha256:603d9df54da5029fc0d0e3c09b6db33733af53182bee030c0c7af99e88ed3b39", size = 37865, upload-time = "2026-07-31T19:54:13.959Z" },
 ]
 
 [[package]]

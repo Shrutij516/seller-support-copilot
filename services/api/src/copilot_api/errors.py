@@ -54,6 +54,10 @@ def unprocessable(detail: str) -> ProblemError:
     return ProblemError(422, "Unprocessable Entity", detail)
 
 
+def service_unavailable(detail: str) -> ProblemError:
+    return ProblemError(503, "Service Unavailable", detail)
+
+
 def _problem_response(
     status_code: int, title: str, detail: str | None, type_: str = "about:blank"
 ) -> JSONResponse:

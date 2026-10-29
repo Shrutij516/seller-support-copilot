@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from copilot_api.models import CaseStatus, CaseType, ListingStatus, OrderStatus
 
@@ -112,12 +112,25 @@ class ChatSessionListResponse(BaseModel):
     next_cursor: str | None
 
 
+class ChatMessageCreateBody(ApiModel):
+    # 2000 chars bounds what one request can spend on embedding + prompt tokens.
+    content: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
+
+
+class CitationResponse(BaseModel):
+    index: int
+    source: str
+    snippet: str
+
+
 class ChatMessageResponse(BaseModel):
     session_id: str
     message_id: str
     role: str
     content: str
     created_at: datetime
+    # Empty for user messages and for refusals; [n] markers in `content` refer to `index`.
+    citations: list[CitationResponse]
 
 
 class ChatMessageListResponse(BaseModel):

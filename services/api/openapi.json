@@ -127,6 +127,22 @@
         "title": "CaseType",
         "type": "string"
       },
+      "ChatMessageCreateBody": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "title": "ChatMessageCreateBody",
+        "type": "object"
+      },
       "ChatMessageListResponse": {
         "properties": {
           "items": {
@@ -157,6 +173,13 @@
       },
       "ChatMessageResponse": {
         "properties": {
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/CitationResponse"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
           "content": {
             "title": "Content",
             "type": "string"
@@ -184,7 +207,8 @@
           "message_id",
           "role",
           "content",
-          "created_at"
+          "created_at",
+          "citations"
         ],
         "title": "ChatMessageResponse",
         "type": "object"
@@ -266,6 +290,29 @@
           "last_message_at"
         ],
         "title": "ChatSessionResponse",
+        "type": "object"
+      },
+      "CitationResponse": {
+        "properties": {
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "snippet": {
+            "title": "Snippet",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "index",
+          "source",
+          "snippet"
+        ],
+        "title": "CitationResponse",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -1038,6 +1085,57 @@
           }
         },
         "summary": "List Chat Messages",
+        "tags": [
+          "chat"
+        ]
+      },
+      "post": {
+        "description": "Store the seller's question, answer it from the policy knowledge base, store and\nreturn the answer. The question is stored even if answering fails (a 503 leaves the user\nmessage in place and no assistant message), so the thread shows what was asked.",
+        "operationId": "post_chat_message_v1_chat_sessions__session_id__messages_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatMessageCreateBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatMessageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Chat Message",
         "tags": [
           "chat"
         ]

@@ -12,6 +12,12 @@ from copilot_api.dynamo.client import create_dynamodb_client
 from copilot_api.errors import register_exception_handlers
 from copilot_api.logging import configure_logging
 from copilot_api.middleware import RequestIdMiddleware
+from copilot_api.rag.bedrock import (
+    BedrockConverseGenerator,
+    BedrockKnowledgeBaseRetriever,
+    create_bedrock_agent_runtime_client,
+    create_bedrock_runtime_client,
+)
 from copilot_api.routers import admin, cases, chat, listings, me, orders
 
 
@@ -32,6 +38,16 @@ def create_app() -> FastAPI:
     app.state.db_session_factory = db.create_session_factory(engine)
     app.state.jwks_cache = JWKSCache(settings.cognito_jwks_url)
     app.state.chat_repo = ChatRepository(create_dynamodb_client(settings))
+    app.state.retriever = BedrockKnowledgeBaseRetriever(
+        create_bedrock_agent_runtime_client(settings),
+        knowledge_base_id=settings.bedrock_knowledge_base_id,
+        top_k=settings.rag_top_k,
+    )
+    app.state.generator = BedrockConverseGenerator(
+        create_bedrock_runtime_client(settings),
+        model_id=settings.bedrock_model_id,
+        max_tokens=settings.rag_max_tokens,
+    )
 
     app.add_middleware(
         CORSMiddleware,
