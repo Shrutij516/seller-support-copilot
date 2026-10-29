@@ -270,6 +270,15 @@ build; don't let it drift from the code.
 - Tradeoff we accept: Both renderings exist in the DOM at once (only one is visible via CSS), which means slightly more markup shipped than a media-query-free approach, and any interaction handler on the first column (`rowHref`) has to be wired identically in both branches of the component.
 - Revisit if: A page's mobile card layout needs to diverge meaningfully from "first column as title, rest as label/value pairs" (a genuinely different mobile UX, not just a reflow).
 
+## Hermetic AWS environment in tests
+
+- Status: In use (`services/api/tests/conftest.py`, guarded by `tests/unit/test_aws_isolation.py`)
+- What it does: The top-level test conftest forces dummy `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN`, sets `AWS_DEFAULT_REGION=us-east-1`, unsets `AWS_PROFILE` / `AWS_DEFAULT_PROFILE`, and points `AWS_CONFIG_FILE` / `AWS_SHARED_CREDENTIALS_FILE` at a path that doesn't exist, before any test module imports boto3. A guard test asserts boto3 resolves exactly those dummy env credentials.
+- Why we chose it: Tests must never be able to sign a request as a real AWS identity, and must behave the same on a laptop with a live AWS login as in CI. Env-var credentials are first in botocore's provider chain, so forcing them there (and hiding `~/.aws`) cuts off every later provider (profile, SSO, `login`, IMDS) in one place, with no per-test fixture to forget.
+- Rejected alternative: Adding `botocore[crt]` as a dependency. It makes the collection error go away, but by letting tests successfully resolve the developer's real credentials, which is the actual bug. Also rejected: relying on CI's job-level dummy env vars (the status quo), which protects CI only and leaves every local run exposed.
+- Tradeoff we accept: The conftest overwrites any AWS env vars exported in the shell, so a test can't deliberately use real AWS (e.g., a live Bedrock smoke test) without opting out explicitly. That's intended: anything that talks to real AWS belongs outside this suite and gets run by hand.
+- Revisit if: We add a deliberately live-AWS test tier; it should live in its own directory/marker with its own conftest, not weaken this one.
+
 ## Cut or deferred
 
 - **Redis**: Cut. No measured latency problem to justify a cache. Add back only if profiling shows a real hot path.
@@ -278,3 +287,13 @@ build; don't let it drift from the code.
 - **Lambda**: Not needed in core. Natural fit for the stretch SQS ingestion worker (bursty, event-triggered).
 - **Spring Boot**: Rejected. Common at Amazon, but my Java is coursework-only; FastAPI is the choice I can defend in depth.
 - **Rate limiting**: Deferred. No Redis (see above) to back a token bucket in the app itself, and it's the wrong layer for it anyway. Revisit with an API Gateway usage plan or WAF rate-based rule at deploy time, in front of the API rather than inside it.
+
+## Incidents
+
+### 2026-10-28: Backend test suite read real local AWS credentials
+
+- Symptom: Plain `uv run pytest` in `services/api` failed at collection with 3 errors (`tests/integration`, `tests/unit/test_cors.py`, `tests/unit/test_health.py`): `botocore.exceptions.MissingDependencyException: Missing Dependency: Using the login credential provider requires an additional dependency. You will need to pip install "botocore[crt]"`. CI stayed green throughout.
+- Root cause: Nothing in the test suite isolated AWS credential resolution. With no AWS env vars set, botocore walked its provider chain into the developer's real `~/.aws/config`, which uses the `login` provider (needs `botocore[crt]`, not installed). CI passed only because `.github/workflows/ci.yml` sets dummy `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` at job level, and the Makefile's `migrate`/`dynamodb-init` targets set them inline, so the gap only showed on a machine with a real AWS login. Had `botocore[crt]` been installed, tests would have silently resolved a real IAM user's credentials.
+- Evidence: Repo audit on 2026-10-28 reproduced the collection error with no AWS env vars in the shell; the same suite passed (83 tests, 90% coverage) once dummy AWS vars were exported. On `fix/hermetic-tests`, `tests/unit/test_aws_isolation.py` fails with the same `MissingDependencyException` when the conftest fix is commented out, and passes with it restored.
+- Fix: `services/api/tests/conftest.py` forces dummy AWS credentials, unsets `AWS_PROFILE`, and points the AWS config/credentials files at a nonexistent path before any boto3 import; `tests/unit/test_aws_isolation.py` asserts boto3 resolves only those dummy env credentials. Did not add `botocore[crt]` (see "Hermetic AWS environment in tests").
+- Lesson: "CI is green" proved only that CI's environment was hermetic, not the suite. Isolation belongs in the test code itself, with a test that fails if it regresses, rather than in whatever env vars the runner happens to set.
