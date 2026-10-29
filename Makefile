@@ -1,11 +1,18 @@
 API_DIR := services/api
 WEB_DIR := apps/web
 INFRA_DIR := infra
+# Knowledge Base stack (infra/lib/knowledge-base-stack.ts). kb-* targets call real AWS with
+# your own credentials and cost money; nothing (CI included) runs them automatically.
+KB_STACK ?= KnowledgeBaseStack
+KB_REGION ?= us-east-1
+KB_DOCS_DIR := data/policies
+kb_output = $$(aws cloudformation describe-stacks --region $(KB_REGION) --stack-name $(KB_STACK) \
+	--query 'Stacks[0].Outputs[?OutputKey==`$(1)`].OutputValue' --output text)
 CLIENT_DIR := packages/api-client
 # Uses the pnpm version pinned in package.json via corepack (ships with Node 24).
 PNPM ?= corepack pnpm
 
-.PHONY: up down test test-integration lint typecheck migrate dynamodb-init seed coverage openapi openapi-check link-user api-client api-client-check
+.PHONY: up down test test-integration lint typecheck migrate dynamodb-init seed coverage openapi openapi-check link-user api-client api-client-check kb-upload kb-ingest
 
 up: ## Start Postgres, DynamoDB Local, and the API; wait until healthy
 	docker compose up -d --build --wait
@@ -70,3 +77,36 @@ typecheck:
 	$(PNPM) --filter @copilot/api-client run typecheck
 	cd $(WEB_DIR) && $(PNPM) typecheck
 	cd $(INFRA_DIR) && npm run build
+
+kb-upload: ## Mirror data/policies into the KB docs bucket (deletes objects not in the repo)
+	@bucket=$(call kb_output,DocsBucketName); \
+	if [ -z "$$bucket" ] || [ "$$bucket" = "None" ]; then \
+		echo "No DocsBucketName output on stack $(KB_STACK) in $(KB_REGION); deploy it first." >&2; exit 1; \
+	fi; \
+	echo "Syncing $(KB_DOCS_DIR) -> s3://$$bucket/"; \
+	aws s3 sync $(KB_DOCS_DIR) "s3://$$bucket/" --region $(KB_REGION) --delete --exclude "*" --include "*.md"
+
+kb-ingest: ## Start a KB ingestion job and poll until COMPLETE/FAILED; prints statistics
+	@set -e; \
+	kb_id=$(call kb_output,KnowledgeBaseId); \
+	ds_id=$(call kb_output,DataSourceId); \
+	if [ -z "$$kb_id" ] || [ "$$kb_id" = "None" ] || [ -z "$$ds_id" ] || [ "$$ds_id" = "None" ]; then \
+		echo "No KnowledgeBaseId/DataSourceId outputs on stack $(KB_STACK) in $(KB_REGION)." >&2; exit 1; \
+	fi; \
+	job_id=$$(aws bedrock-agent start-ingestion-job --region $(KB_REGION) \
+		--knowledge-base-id "$$kb_id" --data-source-id "$$ds_id" \
+		--query ingestionJob.ingestionJobId --output text); \
+	echo "Ingestion job $$job_id started (KB $$kb_id, data source $$ds_id)"; \
+	while :; do \
+		status=$$(aws bedrock-agent get-ingestion-job --region $(KB_REGION) \
+			--knowledge-base-id "$$kb_id" --data-source-id "$$ds_id" --ingestion-job-id "$$job_id" \
+			--query ingestionJob.status --output text); \
+		echo "  status: $$status"; \
+		case "$$status" in COMPLETE|FAILED|STOPPED) break ;; esac; \
+		sleep 10; \
+	done; \
+	aws bedrock-agent get-ingestion-job --region $(KB_REGION) \
+		--knowledge-base-id "$$kb_id" --data-source-id "$$ds_id" --ingestion-job-id "$$job_id" \
+		--query "ingestionJob.{status:status,statistics:statistics,failureReasons:failureReasons}" \
+		--output json; \
+	[ "$$status" = "COMPLETE" ]

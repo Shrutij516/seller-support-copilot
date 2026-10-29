@@ -2,6 +2,7 @@
 import { App } from "aws-cdk-lib";
 
 import { type BudgetConfig, BudgetStack, budgetConfigFromContext } from "../lib/budget-stack";
+import { KB_REGION, KnowledgeBaseStack } from "../lib/knowledge-base-stack";
 
 const app = new App();
 
@@ -17,4 +18,11 @@ try {
 new BudgetStack(app, "BudgetStack", {
   budget,
   description: "Seller Support Copilot: monthly cost budget and email alerts",
+});
+
+new KnowledgeBaseStack(app, "KnowledgeBaseStack", {
+  // Region pinned (Titan V2 + S3 Vectors + the API all live there); account left to the
+  // deploying credentials, so synth needs neither credentials nor lookups.
+  env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: KB_REGION },
+  description: "Seller Support Copilot: Bedrock Knowledge Base over seller policy docs",
 });
