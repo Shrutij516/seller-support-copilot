@@ -27,6 +27,7 @@ const ACCOUNT_PLACEHOLDER = "{{ACCOUNT_ID}}";
 const KB_ROLE_PATTERN = `arn:aws:iam::${ACCOUNT_PLACEHOLDER}:role/KnowledgeBaseStack-*`;
 const VECTOR_BUCKET_ARN = `arn:aws:s3vectors:us-east-1:${ACCOUNT_PLACEHOLDER}:bucket/${VECTOR_BUCKET_NAME}`;
 const VECTOR_INDEX_ARN = `${VECTOR_BUCKET_ARN}/index/${VECTOR_INDEX_NAME}`;
+const BOOTSTRAP_VERSION_PARAM_ARN = `arn:aws:ssm:us-east-1:${ACCOUNT_PLACEHOLDER}:parameter/cdk-bootstrap/hnb659fds/version`;
 const DOCS_BUCKET_PATTERN = "arn:aws:s3:::knowledgebasestack-*";
 
 // Actions AWS gives no resource-level permissions for, each with its proof in
@@ -46,6 +47,23 @@ const REVIEWED_RESOURCE_TYPES = [
 ];
 
 const asArray = (value: string | string[]): string[] => (Array.isArray(value) ? value : [value]);
+
+/** IAM ARN matching: `*` matches any run of characters, `?` any single character. */
+function iamArnMatches(pattern: string, arn: string): boolean {
+  const regex = pattern
+    .split("")
+    .map((c) => (c === "*" ? ".*" : c === "?" ? "." : c.replace(/[.+^${}()|[\]\\]/g, "\\$&")))
+    .join("");
+  return new RegExp(`^${regex}$`).test(arn);
+}
+
+function synthKnowledgeBaseStack(): Record<string, unknown> {
+  const app = new App();
+  const stack = new KnowledgeBaseStack(app, "PolicyReviewKnowledgeBaseStack", {
+    env: { region: KB_REGION },
+  });
+  return Template.fromStack(stack).toJSON();
+}
 
 function loadStatements(): Statement[] {
   const policy = JSON.parse(readFileSync(POLICY_PATH, "utf8")) as {
@@ -161,12 +179,51 @@ describe("CloudFormation execution policy (bootstrap/cfn-exec-policy.json)", () 
     expect(compact.length).toBeLessThanOrEqual(6144);
   });
 
+  test("ReadCdkBootstrapVersion grants only ssm:GetParameters on the bootstrap version parameter", () => {
+    const statement = statements.find((s) => s.Sid === "ReadCdkBootstrapVersion");
+    expect(statement).toBeDefined();
+    expect(actionsOf(statement!)).toEqual(["ssm:GetParameters"]);
+    expect(resourcesOf(statement!)).toEqual([BOOTSTRAP_VERSION_PARAM_ARN]);
+  });
+
+  test("no ssm: action is granted on any other resource", () => {
+    const ssmGrants = statements
+      .filter((s) => actionsOf(s).some((a) => a.startsWith("ssm:")))
+      .map((s) => ({ actions: actionsOf(s), resources: resourcesOf(s) }));
+    expect(ssmGrants).toEqual([
+      { actions: ["ssm:GetParameters"], resources: [BOOTSTRAP_VERSION_PARAM_ARN] },
+    ]);
+  });
+
+  test("every SSM-typed template parameter is readable by the execution role", () => {
+    // CloudFormation resolves AWS::SSM::Parameter::Value<...> parameters with the execution
+    // role when it creates the change set (the 4c deploy failed on exactly this).
+    const parameters = (synthKnowledgeBaseStack().Parameters ?? {}) as Record<
+      string,
+      { Type: string; Default?: string }
+    >;
+    const ssmParams = Object.entries(parameters).filter(([, p]) =>
+      p.Type.startsWith("AWS::SSM::Parameter::Value<"),
+    );
+    expect(ssmParams.length).toBeGreaterThan(0); // the bootstrap version check, at least
+    const unreadable = ssmParams
+      .map(([name, p]) => ({
+        name,
+        arn: `arn:aws:ssm:us-east-1:${ACCOUNT_PLACEHOLDER}:parameter${p.Default ?? ""}`,
+      }))
+      .filter(
+        ({ arn }) =>
+          !statements.some(
+            (s) =>
+              actionsOf(s).includes("ssm:GetParameters") &&
+              resourcesOf(s).some((pattern) => iamArnMatches(pattern, arn)),
+          ),
+      );
+    expect(unreadable).toEqual([]);
+  });
+
   test("KnowledgeBaseStack uses only resource types this policy was reviewed for", () => {
-    const app = new App();
-    const stack = new KnowledgeBaseStack(app, "PolicyReviewKnowledgeBaseStack", {
-      env: { region: KB_REGION },
-    });
-    const resources = Template.fromStack(stack).toJSON().Resources as Record<
+    const resources = synthKnowledgeBaseStack().Resources as Record<
       string,
       { Type: string }
     >;

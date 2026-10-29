@@ -132,6 +132,15 @@
       }
     },
     {
+      "Sid": "ReadCdkBootstrapVersion",
+      "Effect": "Allow",
+      "Action": "ssm:GetParameters",
+      "Resource": "arn:aws:ssm:us-east-1:{{ACCOUNT_ID}}:parameter/cdk-bootstrap/hnb659fds/version",
+      "Condition": {
+        "StringEquals": { "aws:RequestedRegion": "us-east-1" }
+      }
+    },
+    {
       "Sid": "CreateKnowledgeBaseNoResourceLevelSupport",
       "Effect": "Allow",
       "Action": "bedrock:CreateKnowledgeBase",
