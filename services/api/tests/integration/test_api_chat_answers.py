@@ -2,6 +2,7 @@
 with the Retriever and Generator replaced by in-memory fakes. No Bedrock calls, no moto.
 """
 
+import uuid
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any
@@ -96,10 +97,16 @@ async def _seller_with_session(
     return headers, created.json()["session_id"]
 
 
-def _post(client: TestClient, session_id: str, headers: dict[str, str], content: Any) -> Any:
-    return client.post(
-        f"/v1/chat/sessions/{session_id}/messages", json={"content": content}, headers=headers
-    )
+def _post(
+    client: TestClient,
+    session_id: str,
+    headers: dict[str, str],
+    content: Any,
+    client_message_id: str | None = None,
+) -> Any:
+    """A fresh client_message_id per call unless one is given (a retry reuses it)."""
+    body = {"content": content, "client_message_id": client_message_id or str(uuid.uuid4())}
+    return client.post(f"/v1/chat/sessions/{session_id}/messages", json=body, headers=headers)
 
 
 def _stored(client: TestClient, session_id: str, headers: dict[str, str]) -> list[Any]:
@@ -257,7 +264,10 @@ async def test_missing_session_is_404(
 
 
 async def test_unauthenticated_is_401(client: TestClient, generator: FakeGenerator) -> None:
-    response = client.post("/v1/chat/sessions/any/messages", json={"content": QUESTION})
+    response = client.post(
+        "/v1/chat/sessions/any/messages",
+        json={"content": QUESTION, "client_message_id": str(uuid.uuid4())},
+    )
 
     assert response.status_code == 401
     assert response.headers["content-type"] == "application/problem+json"
@@ -271,7 +281,7 @@ async def test_admin_token_is_403(
 
     response = client.post(
         "/v1/chat/sessions/any/messages",
-        json={"content": QUESTION},
+        json={"content": QUESTION, "client_message_id": str(uuid.uuid4())},
         headers={"Authorization": f"Bearer {token}"},
     )
 
@@ -344,3 +354,152 @@ async def test_backend_failure_is_503_and_no_assistant_message_stored(
     assert [(m["role"], m["content"]) for m in _stored(client, session_id, headers)] == [
         ("user", QUESTION),
     ]
+
+
+# --- Idempotent send (client_message_id) -----------------------------------------------------
+
+
+async def test_retry_after_503_stores_the_question_once(
+    client: TestClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    rsa_keypair: RSAPrivateKey,
+    retriever: FakeRetriever,
+    generator: FakeGenerator,
+) -> None:
+    headers, session_id = await _seller_with_session(
+        client, session_factory, rsa_keypair, "sub-idem-503"
+    )
+    key = str(uuid.uuid4())
+
+    retriever.error = RagBackendError("retrieve", "ThrottlingException")
+    first = _post(client, session_id, headers, QUESTION, key)
+    assert first.status_code == 503
+    assert [m["role"] for m in _stored(client, session_id, headers)] == ["user"]
+
+    retriever.error = None
+    retry = _post(client, session_id, headers, QUESTION, key)
+
+    assert retry.status_code == 201
+    assert retry.json()["content"] == ANSWER
+    assert [(m["role"], m["content"]) for m in _stored(client, session_id, headers)] == [
+        ("user", QUESTION),
+        ("assistant", ANSWER),
+    ]
+    assert len(generator.calls) == 1  # the 503 attempt never reached the model
+
+
+async def test_retry_after_success_returns_same_answer_without_calling_model(
+    client: TestClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    rsa_keypair: RSAPrivateKey,
+    retriever: FakeRetriever,
+    generator: FakeGenerator,
+) -> None:
+    headers, session_id = await _seller_with_session(
+        client, session_factory, rsa_keypair, "sub-idem-ok"
+    )
+    key = str(uuid.uuid4())
+
+    first = _post(client, session_id, headers, QUESTION, key)
+    again = _post(client, session_id, headers, QUESTION, key)
+
+    assert first.status_code == again.status_code == 201
+    assert again.json() == first.json()
+    assert len(generator.calls) == 1
+    assert len(retriever.calls) == 1
+    assert [m["role"] for m in _stored(client, session_id, headers)] == ["user", "assistant"]
+
+
+async def test_different_ids_store_separate_questions(
+    client: TestClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    rsa_keypair: RSAPrivateKey,
+    generator: FakeGenerator,
+) -> None:
+    headers, session_id = await _seller_with_session(
+        client, session_factory, rsa_keypair, "sub-idem-two"
+    )
+
+    assert _post(client, session_id, headers, QUESTION, str(uuid.uuid4())).status_code == 201
+    assert _post(client, session_id, headers, QUESTION, str(uuid.uuid4())).status_code == 201
+
+    assert [m["role"] for m in _stored(client, session_id, headers)] == [
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+    ]
+    assert len(generator.calls) == 2
+
+
+async def test_same_id_in_another_session_is_independent(
+    client: TestClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    rsa_keypair: RSAPrivateKey,
+    generator: FakeGenerator,
+) -> None:
+    headers, first_session = await _seller_with_session(
+        client, session_factory, rsa_keypair, "sub-idem-cross"
+    )
+    second = client.post("/v1/chat/sessions", json={"title": "Second"}, headers=headers)
+    assert second.status_code == 201
+    second_session = second.json()["session_id"]
+    key = str(uuid.uuid4())
+
+    assert _post(client, first_session, headers, QUESTION, key).status_code == 201
+    assert _post(client, second_session, headers, QUESTION, key).status_code == 201
+
+    for session_id in (first_session, second_session):
+        assert [m["role"] for m in _stored(client, session_id, headers)] == ["user", "assistant"]
+    assert len(generator.calls) == 2
+
+
+async def test_same_id_with_different_content_is_409(
+    client: TestClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    rsa_keypair: RSAPrivateKey,
+    generator: FakeGenerator,
+) -> None:
+    headers, session_id = await _seller_with_session(
+        client, session_factory, rsa_keypair, "sub-idem-409"
+    )
+    key = str(uuid.uuid4())
+    assert _post(client, session_id, headers, QUESTION, key).status_code == 201
+
+    response = _post(client, session_id, headers, "A completely different question?", key)
+
+    assert response.status_code == 409
+    assert response.headers["content-type"] == "application/problem+json"
+    assert len(generator.calls) == 1
+    assert [m["role"] for m in _stored(client, session_id, headers)] == ["user", "assistant"]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"content": QUESTION},
+        {"content": QUESTION, "client_message_id": "not-a-uuid"},
+        {"content": QUESTION, "client_message_id": ""},
+    ],
+    ids=["missing", "not-a-uuid", "empty"],
+)
+async def test_missing_or_invalid_client_message_id_is_422(
+    client: TestClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    rsa_keypair: RSAPrivateKey,
+    retriever: FakeRetriever,
+    body: dict[str, str],
+) -> None:
+    headers, session_id = await _seller_with_session(
+        client,
+        session_factory,
+        rsa_keypair,
+        f"sub-idem-422-{len(body)}-{body.get('client_message_id', 'x')[:3]}",
+    )
+
+    response = client.post(f"/v1/chat/sessions/{session_id}/messages", json=body, headers=headers)
+
+    assert response.status_code == 422
+    assert response.headers["content-type"] == "application/problem+json"
+    assert retriever.calls == []
+    assert _stored(client, session_id, headers) == []

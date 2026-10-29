@@ -130,6 +130,11 @@
       "ChatMessageCreateBody": {
         "additionalProperties": false,
         "properties": {
+          "client_message_id": {
+            "format": "uuid",
+            "title": "Client Message Id",
+            "type": "string"
+          },
           "content": {
             "maxLength": 2000,
             "minLength": 1,
@@ -138,7 +143,8 @@
           }
         },
         "required": [
-          "content"
+          "content",
+          "client_message_id"
         ],
         "title": "ChatMessageCreateBody",
         "type": "object"
@@ -1090,7 +1096,7 @@
         ]
       },
       "post": {
-        "description": "Store the seller's question, answer it from the policy knowledge base, store and\nreturn the answer. The question is stored even if answering fails (a 503 leaves the user\nmessage in place and no assistant message), so the thread shows what was asked.",
+        "description": "Store the seller's question, answer it from the policy knowledge base, store and\nreturn the answer. The question is stored even if answering fails (a 503 leaves the user\nmessage in place and no assistant message), so the thread shows what was asked.\n\nIdempotent per (session, client_message_id): a retry with the same id never stores the\nquestion again; if an answer was already recorded for it, that answer is returned without\ncalling the model (DECISIONS.md, \"Idempotent message send\").",
         "operationId": "post_chat_message_v1_chat_sessions__session_id__messages_post",
         "parameters": [
           {

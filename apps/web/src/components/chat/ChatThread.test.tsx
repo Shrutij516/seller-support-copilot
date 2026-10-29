@@ -20,9 +20,11 @@ type PostOutcome =
   | { kind: "error"; status: number };
 
 /**
- * In-memory stand-in for the API's chat endpoints, with the real server's storage rule:
- * the question is stored before answering, so it stays stored even when answering fails
- * (503). `nextPost` decides each POST's outcome; `hold` keeps a POST pending until released.
+ * In-memory stand-in for the API's chat endpoints, with the real server's storage rules:
+ * the question is stored before answering (so it stays stored when answering fails, 503), at
+ * most once per client_message_id, and an answer already recorded for that id is returned
+ * without consuming a new outcome. `nextPost` decides each POST's outcome; `hold` keeps a
+ * POST pending until released.
  */
 function fakeServer() {
   const stored: ChatMessage[] = [];
@@ -30,6 +32,9 @@ function fakeServer() {
   let release: (() => void) | null = null;
   let holdNext = false;
   const postBodies: string[] = [];
+  const postIds: string[] = [];
+  const answeredById = new Map<string, ChatMessage>();
+  const seenIds = new Set<string>();
   let seq = 0;
 
   const message = (role: string, content: string, citations: Citation[] = []): ChatMessage => ({
@@ -48,16 +53,23 @@ function fakeServer() {
     return { data: { items: [], next_cursor: null }, error: undefined, response: { status: 200 } };
   });
 
-  const POST = vi.fn(async (_path: string, init: { body: { content: string } }) => {
+  const POST = vi.fn(async (_path: string, init: { body: { content: string; client_message_id: string } }) => {
     postBodies.push(init.body.content);
+    postIds.push(init.body.client_message_id);
     if (holdNext) {
       holdNext = false;
       await new Promise<void>((resolve) => {
         release = resolve;
       });
     }
+    const id = init.body.client_message_id;
+    const previous = answeredById.get(id);
+    if (previous) return { data: previous, error: undefined, response: { status: 201 } };
     const outcome = outcomes.shift() ?? { kind: "answer", content: "ok", citations: [] };
-    stored.push(message("user", init.body.content));
+    if (!seenIds.has(id)) {
+      seenIds.add(id);
+      stored.push(message("user", init.body.content));
+    }
     if (outcome.kind === "error") {
       const titles: Record<number, string> = { 503: "Service Unavailable", 404: "Not Found" };
       return {
@@ -68,6 +80,7 @@ function fakeServer() {
     }
     const answer = message("assistant", outcome.content, outcome.citations);
     stored.push(answer);
+    answeredById.set(id, answer);
     return { data: answer, error: undefined, response: { status: 201 } };
   });
 
@@ -76,6 +89,8 @@ function fakeServer() {
     GET,
     POST,
     postBodies,
+    postIds,
+    stored,
     nextPost: (outcome: PostOutcome) => outcomes.push(outcome),
     holdNextPost: () => {
       holdNext = true;
@@ -181,6 +196,11 @@ describe("ChatThread", () => {
 
     expect(await screen.findByText("You have 30 days from delivery [1].")).toBeInTheDocument();
     expect(server.postBodies).toEqual([QUESTION, QUESTION]);
+    // Retry reuses the question's idempotency key, so the server stores the question once.
+    expect(server.postIds).toHaveLength(2);
+    expect(server.postIds[0]).toMatch(/^[0-9a-f-]{36}$/);
+    expect(server.postIds[1]).toBe(server.postIds[0]);
+    expect(server.stored.filter((m) => m.role === "user")).toHaveLength(1);
     expect(textarea).toHaveValue("");
     await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
   });
@@ -233,5 +253,19 @@ describe("ChatThread", () => {
 
     expect(textarea).toHaveValue("line one\nline two");
     expect(server.POST).not.toHaveBeenCalled();
+  });
+
+  it("gives each new question its own client_message_id", async () => {
+    const server = fakeServer();
+    const user = userEvent.setup();
+    const { textarea } = renderThread();
+    await screen.findByText("No messages in this session yet.");
+
+    await user.type(textarea, "First question?{Enter}");
+    await waitFor(() => expect(textarea).toHaveValue(""));
+    await user.type(textarea, "Second question?{Enter}");
+    await waitFor(() => expect(server.POST).toHaveBeenCalledTimes(2));
+
+    expect(new Set(server.postIds).size).toBe(2);
   });
 });
