@@ -308,6 +308,22 @@ build; don't let it drift from the code.
 - What this shows: every policy doc is under the 1,000-token parent size, so **parents are whole documents**. Here the benefit is precise child matching (a 150-token chunk embeds close to its question) plus whole-document context for the model, with no fact cut off at a boundary. With docs this short, that's close to "retrieve whole docs, ranked by their best paragraph". The advantage over fixed-size grows with longer docs, where a parent is one section rather than the whole file and fixed-size chunks would split more facts.
 - Revisit if: ingestion reports metadata-size errors, the answer eval doesn't recover in-09 and in-15, or the corpus grows enough that ~1,000-token parents stop being "about one section" (then revisit parent size or pre-splitting by section).
 
+## Chat: request/response, not streaming
+
+- Status: In use (phase 5a, branch `feat/web-chat-send`). `apps/web/src/components/chat/ChatThread.tsx` and `useSendChatMessage` in `apps/web/src/lib/api/hooks.ts`.
+- What it does: The web chat sends a message with one `POST /v1/chat/sessions/{id}/messages` through the generated client and renders the whole assistant answer when the response arrives.
+  - **While waiting:** the user's message appears immediately (an optimistic cache entry), Send is disabled, and a status line says the assistant is answering.
+  - **Citations:** listed under each answer as `[n]` source file plus snippet, collapsed in a `<details>` element. An answer with no citations renders no citation block.
+  - **503:** shows "The assistant is temporarily unavailable.", keeps the typed question, and offers Retry.
+  - **404:** says the session is gone.
+  - **Other errors:** use the existing problem+json message mapping.
+  - **Validation:** 1–2,000 characters after trimming, mirroring the API, which stays the source of truth.
+  - **Accessibility:** a dedicated `aria-live` region announces each new answer once, the textarea is labeled, Enter sends and Shift+Enter adds a newline. Nothing is sent mid-IME composition.
+- Why we chose it: Answers are short and fast. The live smoke run measured retrieve at 440 ms and Converse at 1,037 ms, about 1.5 s end to end for a full grounded answer. A spinner for about 1.5 s is acceptable, and request/response keeps every existing piece unchanged: the generated client, problem+json errors, the static-export frontend, the API's synchronous route and its tests, and storing the whole answer with its citations in one write. Citations are filtered from the complete answer text (only `[n]` actually cited), which is simplest when the whole answer is in hand.
+- Rejected alternative: Server-Sent Events streaming (Converse's `ConverseStream`). Text would appear incrementally, but it needs a streaming endpoint and client, a different error model mid-stream (a 503 after half an answer), citation filtering only at the end, a second storage path for partial answers, and proxy and CloudFront configuration that buffers or times out streams. That's a lot of moving parts to save about 1 second.
+- Tradeoff we accept: A spinner instead of incremental text. If answers get longer, or latency grows (bigger parents, larger models), the wait becomes noticeable. Also, on a 503 the API has already stored the question, so pressing Retry stores it a second time: the thread can show the same question twice, once without an answer. That's honest about what the server recorded, and acceptable while 503s are rare.
+- Revisit if: p95 end-to-end latency rises past about 3 s, answers routinely run several paragraphs, or the 503 duplicate-question pattern shows up in real use (then make the retry idempotent server-side).
+
 ## Eval harness
 
 - Status: Planned (phase 5)
@@ -546,7 +562,6 @@ build; don't let it drift from the code.
 - Fix: Verify-and-commit chains now start with `set -o pipefail`. With Docker Hub unreachable, the integration tests ran against `docker compose up -d --wait postgres dynamodb-local` (cached images, no build). The tests use the in-process app, not the API container. Everything passed, and only then was the commit made.
 - Lesson: `&&` only guards what it can see. Piping to `tail` or `grep` hides exit codes unless `pipefail` is set. This extends the 4b lesson ("chain with &&") to "chain with && under pipefail".
 
-
 ### 2026-10-29: A heredoc ended the && chain, so a failed step didn't stop a negative test
 
 - Symptom: While checking the execution policy for the hierarchical change, the first command in a chain failed (`FileNotFoundError` reading the scratchpad copy of the CloudFormation schema bundle, which no longer existed). The commands after it still ran, including a "negative test" that reported `DeleteDataSource REMOVED: Tests: 34 passed`. That looked like a failed negative test, but the test it was meant to exercise had never been added (the count was 34, not 35). No commit was made.
@@ -699,6 +714,42 @@ build; don't let it drift from the code.
 - Fix: Restated as the reviewer's record. The same check was applied to the other entries built from the owner's account (PR #1–#5 reviews, the CLI comma failure, the truncated `cdk diff`), and their Evidence lines say whose record they are.
 - Lesson: Evidence lines state only what was observed, and say who observed it. Don't upgrade a report into a finding.
 
+### 2026-10-29: grep hit a regex complexity limit while scanning README.md
+
+- Symptom: During the secret scan behind commit `49a7d46` (on `feat/kb-hierarchical-chunking`), the grep used to show email-hit context in `README.md` failed with `ugrep: error: ... exceeds complexity limits`.
+- Root cause: The shell's `grep` is ugrep, and a context pattern (`.{0,50}...{0,10}` around an email regex) exceeded its regex complexity limit on that file. Different files hit different engine limits.
+- Evidence: The ugrep error output for `README.md`. The `DECISIONS.md` context grep in the same command, a different pattern, ran fine. The email-context pattern only ever ran on `README.md`.
+- Fix: Switched that check to Python `re`. The retroactive scan then used one Python scanner, with a planted-positive control, for every file.
+- Lesson: Use one scanner implementation (Python) for all files, so behavior and limits are the same everywhere and a failure can't masquerade as a result.
+
+### 2026-10-29: PR #8 merged from GitHub's push banner ahead of PR #7
+
+- Symptom: `main` moved to `23babc9` ("Merge pull request #8 from Shrutij516/feat/web-chat-send") while PR #7 (`feat/kb-hierarchical-chunking`, head `49a7d46`) was still open. GitHub then reported PR #7 as CONFLICTING.
+- Root cause: An operator sequencing slip, in two steps:
+  1. The phase 5a prompt said to paste it only after PR #7 merged, but it was pasted before. So `feat/web-chat-send` was cut from `cf8d634`, without PR #7's DECISIONS.md changes.
+  2. The account owner then opened PR #8 from GitHub's "Compare & pull request" push banner and merged it. The phase 5a instructions said "No PR", and Claude Code didn't open one.
+
+  Both branches appended to the end of DECISIONS.md, hence the conflict.
+- Evidence: `git log origin/main` shows `23babc9` (PR #8) on top of `9ba09ad`. `gh pr view 8`: author and merger Shrutij516, created 16:35:59Z, merged 16:38:04Z. `gh pr view 7`: OPEN, mergeable CONFLICTING, head `49a7d46`, none of its commits in `main`.
+- Fix: Merged `origin/main` into `feat/kb-hierarchical-chunking` with a merge commit (no rebase, because PR #7 is open; no force-push). DECISIONS.md was resolved by keeping both sides, with one "Known open issues" list holding every item from both branches.
+- Lesson: Confirm `main`'s head commit before starting a phase, and only merge the PR number the reviewer names. Ignore GitHub's "Compare & pull request" banner; it appears for any pushed branch, whether or not that branch is meant to become a PR.
+
+### 2026-10-29: Live KB data source deployed from an unmerged branch (infra drift)
+
+- Symptom: The live Knowledge Base data source is `AUKZILCLZK` (`policies-s3-hierarchical`, HIERARCHICAL chunking), but `main`'s `infra/lib/knowledge-base-stack.ts` still defined `policies-s3` with FIXED_SIZE chunking. The account and `main` disagreed.
+- Root cause: The hierarchical change was deployed (`cdk deploy`) from `feat/kb-hierarchical-chunking` while its PR (#7) was still open, and the PR didn't merge right after. Anyone deploying `KnowledgeBaseStack` from `main` in that window would have replaced the hierarchical data source back with a fixed-size one, re-introducing the 18/20 regression and purging the live vectors (`dataDeletionPolicy: DELETE`).
+- Evidence: The deploy output (new data source `AUKZILCLZK`, old `NXNCY57HMT` gone), recorded in "Hierarchical chunking". `main`'s `knowledge-base-stack.ts` at `23babc9` still had `chunkingStrategy: "FIXED_SIZE"` and `name: "policies-s3"`.
+- Fix: PR #7 carries the infra change. Merging it brings `main` back in line with the account. Until then, nobody deploys `KnowledgeBaseStack` from `main`.
+- Lesson: Merge an infra PR before, or right after, the deploy it describes. Never deploy from a branch that might not merge.
+
+### 2026-10-29: Retry after a 503 duplicates the user's question (open bug, now on `main`)
+
+- Symptom: In the web chat (merged in PR #8), if a send fails with 503 and the user presses Retry, the session ends up with the question stored twice: once with no answer, once answered.
+- Root cause: The API stores the user's message before calling Bedrock, deliberately, so the thread shows what was asked even when answering fails. Retry sends a new POST, which stores the question again. Nothing ties the retry to the first attempt.
+- Evidence: Found in review of phase 5a, and acknowledged in "Chat: request/response, not streaming" (tradeoff: "the thread can show the same question twice"). The web test "on 503 keeps the typed question and Retry resends it" asserts two POSTs with the same text, and its fake server stores the question on each.
+- Fix: **Pending**, on the next branch after PR #7 merges: an idempotency key (`client_message_id`) per question, reused on Retry, with the server storing the user message at most once per (session, key).
+- Lesson: When the server persists before a fallible step, a client retry needs an idempotency key from day one. "Rare" isn't the same as "harmless".
+
 ## Known open issues
 
 Not yet fixed. Each needs a decision or a change in its own reviewed phase.
@@ -708,3 +759,5 @@ Not yet fixed. Each needs a decision or a change in its own reviewed phase.
 - **Budget alert email:** budget alerts go to a different email address than the GitHub and Claude account. The owner needs to confirm whether that's intentional.
 - **Stale README:** the README's general Results table and layout rows are out of date. They say 83 backend tests and 90% coverage, `evals` is "placeholder", and `infra` is "`BudgetStack` only". Only the RAG Results subsection is current.
 - **PR #3's description is wrong:** it still says "16/16 pass, 11 of them new"; the actual split was 10 new and 6 existing. PR #3 is merged; the correction of record is in Incidents, "PR #3's description misstates the Jest split".
+- **Nobody can log in yet:** the Cognito User Pool isn't deployed. The web app's sign-in (`oidc-client-ts`) and the API's JWT verification are implemented and tested against minted tokens, but no real user pool exists. The chat page, like every authenticated page, can't be used end to end until Cognito is provisioned and `COGNITO_*` / `NEXT_PUBLIC_*` are configured.
+- **Retry after 503 duplicates the question:** a known bug on `main` since PR #8. See Incidents, "Retry after a 503 duplicates the user's question". The fix (an idempotency key) goes on a fresh branch after PR #7 merges.

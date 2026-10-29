@@ -14,6 +14,8 @@ import { ApiError } from "./errors";
 type OrderStatus = components["schemas"]["OrderStatus"];
 type CaseStatus = components["schemas"]["CaseStatus"];
 type AdminCaseListResponse = components["schemas"]["AdminCaseListResponse"];
+type ChatMessageListResponse = components["schemas"]["ChatMessageListResponse"];
+type ChatMessageResponse = components["schemas"]["ChatMessageResponse"];
 
 export function useMe() {
   return useQuery({
@@ -140,6 +142,62 @@ export function useChatMessages(sessionId: string | null, options?: { enabled?: 
       return data;
     },
     enabled: Boolean(sessionId) && (options?.enabled ?? true),
+  });
+}
+
+/** Client-side bounds for a chat message; the API enforces the same (1..2000 after trimming)
+ * and stays the source of truth. */
+export const CHAT_MESSAGE_MAX_CHARS = 2000;
+
+/**
+ * Send a message and get the grounded answer (POST .../messages returns the assistant
+ * message). The user's message is shown immediately as an optimistic entry; the answer is
+ * appended on success. Either way the thread is refetched afterwards, because the server is
+ * the record: on a 503 it has still stored the question (see the API route), so the refetch
+ * shows it even though no answer came back.
+ */
+export function useSendChatMessage(sessionId: string) {
+  const queryClient = useQueryClient();
+  const key = ["chat-messages", sessionId];
+  return useMutation({
+    mutationFn: async (content: string) => {
+      const { data, error, response } = await getApiClient().POST(
+        "/v1/chat/sessions/{session_id}/messages",
+        { params: { path: { session_id: sessionId } }, body: { content } },
+      );
+      if (error) throw new ApiError(error, response.status);
+      return data;
+    },
+    onMutate: async (content) => {
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<ChatMessageListResponse>(key);
+      const optimistic: ChatMessageResponse = {
+        session_id: sessionId,
+        message_id: `optimistic-${Date.now()}`,
+        role: "user",
+        content,
+        created_at: new Date().toISOString(),
+        citations: [],
+      };
+      queryClient.setQueryData<ChatMessageListResponse>(key, (old) => ({
+        items: [...(old?.items ?? []), optimistic],
+        next_cursor: old?.next_cursor ?? null,
+      }));
+      return { previous };
+    },
+    onSuccess: (assistant) => {
+      queryClient.setQueryData<ChatMessageListResponse>(key, (old) => ({
+        items: [...(old?.items ?? []), assistant],
+        next_cursor: old?.next_cursor ?? null,
+      }));
+    },
+    onError: (_error, _content, context) => {
+      if (context?.previous) queryClient.setQueryData(key, context.previous);
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: key });
+      void queryClient.invalidateQueries({ queryKey: ["chat-sessions"] });
+    },
   });
 }
 

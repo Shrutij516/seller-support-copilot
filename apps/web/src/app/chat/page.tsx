@@ -4,8 +4,8 @@ import { useState, type FormEvent } from "react";
 import { PageHeading } from "@/components/PageHeading";
 import { SellerOnlyNotice } from "@/components/SellerOnlyNotice";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { useChatMessages, useChatSessions, useCreateChatSession } from "@/lib/api/hooks";
-import { formatDate } from "@/lib/format";
+import { ChatThread } from "@/components/chat/ChatThread";
+import { useChatSessions, useCreateChatSession } from "@/lib/api/hooks";
 
 function NewSessionForm({ onCreated }: { onCreated: (sessionId: string) => void }) {
   const [title, setTitle] = useState("");
@@ -57,7 +57,6 @@ export default function ChatPage() {
   const isAdmin = roles.includes("admin");
   const sessions = useChatSessions({ enabled: !isAdmin });
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const messages = useChatMessages(selectedId, { enabled: !isAdmin });
 
   const sessionList = sessions.data?.items ?? [];
   const activeId = selectedId ?? sessionList[0]?.session_id ?? null;
@@ -75,7 +74,7 @@ export default function ChatPage() {
     <div>
       <PageHeading>Chat</PageHeading>
       <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-        The assistant isn&apos;t connected yet; this shows session and message history only.
+        Answers come only from the marketplace policies, with their sources listed under each answer.
       </p>
 
       <div className="mt-4">
@@ -124,59 +123,11 @@ export default function ChatPage() {
           <h2 id="chat-messages-heading" className="text-sm font-semibold text-slate-500 dark:text-slate-400">
             Messages
           </h2>
-          <div aria-live="polite" className="mt-2 min-h-[8rem]">
-            {!activeId && <p className="text-slate-500 dark:text-slate-400">Select or start a session.</p>}
-            {activeId && messages.isLoading && <p className="text-slate-500 dark:text-slate-400">Loading messages...</p>}
-            {activeId && messages.isError && (
-              <p role="alert" className="text-red-700 dark:text-red-400">
-                {messages.error.message}
-              </p>
-            )}
-            {activeId && messages.isSuccess && messages.data.items.length === 0 && (
-              <p className="text-slate-500 dark:text-slate-400">No messages in this session yet.</p>
-            )}
-            {activeId && messages.isSuccess && messages.data.items.length > 0 && (
-              <ul className="space-y-2">
-                {messages.data.items.map((message) => (
-                  <li
-                    key={message.message_id}
-                    className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800"
-                  >
-                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">{message.role}</p>
-                    <p className="mt-1">{message.content}</p>
-                    <p className="mt-1 text-xs text-slate-400">{formatDate(message.created_at)}</p>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          <form
-            className="mt-4 flex gap-2"
-            onSubmit={(e) => e.preventDefault()}
-            aria-describedby="composer-disabled-hint"
-          >
-            <label htmlFor="chat-composer" className="sr-only">
-              Send a message
-            </label>
-            <input
-              id="chat-composer"
-              type="text"
-              disabled
-              placeholder="Coming soon"
-              className="flex-1 rounded-md border border-slate-200 bg-slate-100 px-2 py-1.5 text-sm text-slate-400 dark:border-slate-800 dark:bg-slate-900"
-            />
-            <button
-              type="submit"
-              disabled
-              className="rounded-md border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-400 dark:border-slate-800"
-            >
-              Send
-            </button>
-          </form>
-          <p id="composer-disabled-hint" className="mt-1 text-xs text-slate-400">
-            Sending messages is coming soon.
-          </p>
+          {activeId ? (
+            <ChatThread key={activeId} sessionId={activeId} />
+          ) : (
+            <p className="mt-2 text-slate-500 dark:text-slate-400">Select or start a session.</p>
+          )}
         </section>
       </div>
     </div>
