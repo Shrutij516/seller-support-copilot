@@ -948,6 +948,45 @@ build; don't let it drift from the code.
 - Fix: Not now (listed under Known open issues). Proposed: build the snippet from the matched child chunk, or from a window around the best-matching sentence in the parent.
 - Lesson: When the chunking strategy changes, re-check everything downstream of retrieval, including the citation UI.
 
+### 2026-10-29: Signed-out pages show raw "missing bearer token"
+
+- Symptom: After signing out, `/chat` showed the raw text "missing bearer token" instead of sending the user to sign in.
+- Root cause: The API is right to reject the request (`_bearer_token` in `services/api/src/copilot_api/auth.py` raises `TokenError("missing bearer token")`, which becomes a 401). The frontend is the problem:
+  - **No signed-out gate on seller pages.** Only `/` (`app/page.tsx`) and `/admin/cases` check `!user`; `/chat`, `/cases` and `/orders` don't.
+  - **The client sends no header.** `lib/api/client.ts` adds `Authorization` only when a non-expired user exists, so the request goes out with no token.
+  - **The page prints the raw error.** It shows the 401's `error.message` as-is.
+- Evidence: A reviewer-verified screenshot (2026-10-29), plus the `!user` checks found by `git grep` in `app/page.tsx` and `app/admin/cases/page.tsx` only.
+- Fix: Not yet (listed under Known open issues). Proposed: a shared signed-out gate (or a 401 handler in the API client) that shows a "Sign in" prompt.
+- Lesson: Test every route in the signed-out state, not just the happy path after sign-in.
+
+### 2026-10-29: Possible incomplete sign-out (hypothesis, unconfirmed)
+
+- Symptom: After signing out, clicking Sign in appeared to log straight back in as the seller, with no login form. The suspicion: sign-out cleared the local tokens but not the Cognito hosted-UI session.
+- Root cause: **Not established.** The code calls Cognito's `/logout` as documented, so the simplest form of the hypothesis (the app never ends the Cognito session) isn't supported by the code.
+  - **What the code does:** `signOut` in `lib/auth/AuthProvider.tsx` calls `removeUser()` (clears the oidc-client-ts user from sessionStorage), then sets `window.location.href` to `buildCognitoLogoutUrl()` (`lib/auth/userManager.ts`). That URL is `GET {NEXT_PUBLIC_COGNITO_DOMAIN}/logout?client_id=<app client id>&logout_uri=http://localhost:3000`.
+  - **What Cognito's docs require:** the logout endpoint docs (https://docs.aws.amazon.com/cognito/latest/developerguide/logout-endpoint.html) say `/logout` "signs out the user and redirects" to an allowed sign-out URL. `client_id` is required, and either `logout_uri` or `redirect_uri` must be present. With `logout_uri` + `client_id`, Cognito redirects to `logout_uri` if it's one of the app client's Allowed sign-out URLs. The code sends exactly `client_id` + `logout_uri`.
+  - **The URL matches the registered one.** `logout_uri` equals `WEB_LOGOUT_URL` (`http://localhost:3000`) registered in `infra/lib/auth-stack.ts`.
+  - **Not a standard OIDC flow.** It's correct that oidc-client-ts isn't used for this (`signoutRedirect`), because Cognito publishes no `end_session_endpoint`.
+  - **Tokens aren't revoked.** `/logout` doesn't revoke already-issued tokens. They're short-lived and the app has already dropped them, so that isn't what was observed, but the refresh token stays valid until it expires (a revocation call isn't implemented).
+- Evidence: Code reading as above, plus a no-session, read-only probe of the real endpoint (no cookies sent, no AWS resources changed):
+  - **`logout_uri=http://localhost:3000`:** `302 -> http://localhost:3000`, so Cognito accepts the registered sign-out URL.
+  - **Control, `logout_uri=http://localhost:3001`:** a 302 to the hosted `/login` page instead.
+
+  The probe can't show that a live session cookie gets cleared, because it had no session.
+- Fix: None now (on purpose). To confirm or rule it out: sign in, open DevTools, click Sign out, and check that the `/logout` request appears with a 302 to `http://localhost:3000` and that the hosted-UI domain's `cognito` cookie is gone. Then click Sign in and see whether the login form appears. Other explanations to rule out:
+  - the login page was served but filled and submitted quickly by the browser's password manager
+  - the sign-out navigation never happened (for example a different tab)
+  - the private-window (admin) and normal-window (seller) sessions got mixed up
+- Lesson: Record an unconfirmed observation as a hypothesis with a reproduction plan, and check it against the code and docs before "fixing" it.
+
+### 2026-10-29: Terminal instructions without the opening and `cd` steps
+
+- Symptom: The reviewer gave multi-step terminal instructions (for the second terminal in the live run) without saying to open a new terminal window or which directory to `cd` into first. The account owner had to ask.
+- Root cause: The instructions assumed context (an open terminal already in the repo root) that the reader didn't have.
+- Evidence: The account owner's question during the live run.
+- Fix: Clarified in conversation. The README runbook says "In a second terminal"; future instructions spell out the steps.
+- Lesson: Every terminal block starts with how to open the terminal (new window or tab) and the `cd` to the absolute repo path.
+
 ## Known open issues
 
 Not yet fixed. Each needs a decision or a change in its own reviewed phase.
@@ -965,6 +1004,10 @@ Not yet fixed. Each needs a decision or a change in its own reviewed phase.
 - **"New session" is disabled with no hint** until a title is typed (`apps/web/src/app/chat/page.tsx`). See Incidents.
 - **Assistant Markdown renders as plain text,** so `**bold**` shows literal asterisks (`ChatThread.tsx`). See Incidents.
 - **Citation snippets show the first 300 characters of the parent chunk,** which with hierarchical chunking is usually the doc's intro, not the supporting sentence. The proposed fix is to build the snippet from the matched child chunk. See Incidents.
+- **Signed-out seller pages show the raw API error "missing bearer token"** instead of a sign-in prompt (no signed-out gate on `/chat`, `/cases`, `/orders`). See Incidents.
+- **Possible incomplete sign-out (unconfirmed).** The code calls Cognito `/logout` with `client_id` + a registered `logout_uri` as documented, but the live observation that Sign in skipped the login form hasn't been reproduced. Refresh tokens aren't revoked on sign-out. See Incidents.
+- **Not tested live:** token refresh (`automaticSilentRenew` is off, so the user has to sign in again when the ID token expires), MFA (not configured), and password reset / forgot-password.
+- **The server-side admin 403 hasn't been exercised with a real Cognito token.** The live check of a seller on `/admin/cases` hit only the frontend gate. The API's role check is covered by pytest integration tests (`test_api_admin.py`, run in CI) with locally signed test keys.
 
 ## Resolved issues
 

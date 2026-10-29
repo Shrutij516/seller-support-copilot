@@ -168,6 +168,8 @@ Run with the steps above (local web app and API, deployed Cognito user pool and 
 - **Sign-in:** the Cognito hosted-UI sign-in as the seller test user worked, and the nav showed the signed-in user.
 - **Answerable question:** "How many days does a buyer have to request a refund?" was answered "A buyer can request a refund within **30 days** of the order's delivery date [1]..." with one source. That matches `returns-and-refunds.md`.
 - **Off-topic question:** "What is the capital of France?" got the exact refusal message from `rag/prompt.py`. Retrieval scored below `rag_min_score` (0.55), so the model was never called.
+- **Admin sign-in:** an admin test user (created with `make auth-create-user ... GROUP=admin`) signed in from a private window, landed on `/admin/cases`, and saw cases across many sellers.
+- **Seller blocked from admin:** a seller visiting `/admin/cases` saw "This page is only available to admins". That's the frontend gate, so no API call was made. The API's server-side 403 for non-admins is covered by pytest integration tests (`services/api/tests/integration/test_api_admin.py`) with locally signed test keys, but wasn't exercised with a real Cognito token.
 
 Honest limits of this run:
 - The app isn't deployed to AWS. Only Cognito and the Bedrock Knowledge Base are AWS-managed.
@@ -178,6 +180,8 @@ Known UI issues found during the run (DECISIONS.md, Known open issues):
 - "New session" is disabled, with no hint, until a title is typed.
 - Answer markdown renders as literal asterisks.
 - Citation snippets show the parent chunk's intro, not the sentence that supports the answer.
+- After sign-out, seller pages show the raw API error "missing bearer token" instead of a sign-in prompt.
+- After sign-out, Sign in appeared to skip the login form (unconfirmed; see DECISIONS.md).
 
 ### Checks
 
