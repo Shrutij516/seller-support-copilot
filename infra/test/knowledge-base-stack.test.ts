@@ -2,8 +2,10 @@ import { App } from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
 
 import {
-  CHUNK_MAX_TOKENS,
-  CHUNK_OVERLAP_PERCENT,
+  CHILD_CHUNK_MAX_TOKENS,
+  CHUNK_OVERLAP_TOKENS,
+  DATA_SOURCE_NAME,
+  PARENT_CHUNK_MAX_TOKENS,
   EMBEDDING_DIMENSIONS,
   KB_REGION,
   KB_S3VECTORS_ACTIONS,
@@ -165,9 +167,11 @@ describe("KnowledgeBaseStack", () => {
     });
   });
 
-  test("S3 data source on the docs bucket with fixed-size 300-token / 20% chunks", () => {
+  test("S3 data source uses hierarchical chunking (parent 1000 / child 150 / overlap 30)", () => {
     template.resourceCountIs("AWS::Bedrock::DataSource", 1);
     template.hasResourceProperties("AWS::Bedrock::DataSource", {
+      Name: "policies-s3-hierarchical",
+      DataDeletionPolicy: "DELETE",
       DataSourceConfiguration: {
         Type: "S3",
         S3Configuration: {
@@ -176,15 +180,31 @@ describe("KnowledgeBaseStack", () => {
       },
       VectorIngestionConfiguration: {
         ChunkingConfiguration: {
-          ChunkingStrategy: "FIXED_SIZE",
-          FixedSizeChunkingConfiguration: {
-            MaxTokens: CHUNK_MAX_TOKENS,
-            OverlapPercentage: CHUNK_OVERLAP_PERCENT,
+          ChunkingStrategy: "HIERARCHICAL",
+          HierarchicalChunkingConfiguration: {
+            LevelConfigurations: [{ MaxTokens: 1000 }, { MaxTokens: 150 }],
+            OverlapTokens: 30,
           },
+          FixedSizeChunkingConfiguration: Match.absent(),
         },
       },
     });
-    expect([CHUNK_MAX_TOKENS, CHUNK_OVERLAP_PERCENT]).toEqual([300, 20]);
+    expect([PARENT_CHUNK_MAX_TOKENS, CHILD_CHUNK_MAX_TOKENS, CHUNK_OVERLAP_TOKENS]).toEqual([
+      1000, 150, 30,
+    ]);
+  });
+
+  test("data source name differs from the fixed-size one it replaces", () => {
+    // Changing ChunkingStrategy forces replacement (create new, then delete old) within the
+    // same knowledge base; reusing "policies-s3" would collide during that window.
+    expect(DATA_SOURCE_NAME).toBe("policies-s3-hierarchical");
+    expect(DATA_SOURCE_NAME).not.toBe("policies-s3");
+  });
+
+  test("combined chunk tokens stay far under the ~8,000 hierarchical metadata risk", () => {
+    // AWS: hierarchical + S3 Vectors can exceed per-vector metadata limits above ~8,000
+    // combined tokens (kb-chunking.html). Keep a wide margin.
+    expect(PARENT_CHUNK_MAX_TOKENS + CHILD_CHUNK_MAX_TOKENS).toBeLessThanOrEqual(2000);
   });
 
   test("KB role trust is bedrock.amazonaws.com with SourceAccount and SourceArn conditions", () => {
