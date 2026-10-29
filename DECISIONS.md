@@ -381,5 +381,11 @@ build; don't let it drift from the code.
   - every `AWS::SSM::Parameter::Value<...>` parameter in the synthesized stack is readable under the policy, so a future stack can't repeat this
 
   Negative tests: removing the statement fails 3 tests; widening it to `parameter/*` fails 2. The bootstrap README's wrong claim is corrected. Applying the fix to the live policy (`make deploy-policy-update`) and redeploying are left to the account owner.
+- What each reviewer missed:
+  - **Claude Code (4c-pre):** said in its phase report and in `infra/bootstrap/README.md` that the execution role needs no SSM permission. It based that on CDK's bootstrap template, where the deploy role reads the version parameter, and never checked the synthesized `KnowledgeBaseStack` template. There, `BootstrapVersion` is SSM-typed and is resolved by the execution role.
+  - **Reviewer (the account owner and their review assistant):** read the `cdk diff` output, saw the SSM-typed `BootstrapVersion` parameter and the "Could not create a change set" line, and approved the deploy, calling that line harmless instead of running `cdk diff -v` to see the reason.
+- Process fix:
+  1. Any "permission X is not needed" claim must cite the synthesized template, not general docs or another template.
+  2. "Could not create a change set" in `cdk diff` blocks deploy approval until `cdk diff -v` shows the reason.
 - Lesson: Verify claims about who resolves what against the synthesized template, not against comments in someone else's template. Policy tests must cover everything CloudFormation evaluates with the role (`Parameters` and `Rules` too), not just `Resources`. Treat "Could not create a change set" from `cdk diff` as a signal to run `cdk diff -v` and read the reason, not as noise to deploy past.
 
