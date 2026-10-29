@@ -160,6 +160,42 @@ build; don't let it drift from the code.
 - Tradeoff we accept: Two network round trips (and two failure points) instead of one, and more of our own code to maintain (prompt, citation mapping, score filtering). `rag_min_score` (0.3) is an untuned placeholder until the eval set exists: too high refuses answerable questions, too low lets weak context through. Citations list every chunk sent to the model, not only the ones the answer actually cites.
 - Revisit if: Evals show RetrieveAndGenerate's managed prompt/citations matching ours on faithfulness at lower latency, or we need Bedrock features only available through it.
 
+## S3 Vectors as KB vector store
+
+- Status: Defined in CDK (`infra/lib/knowledge-base-stack.ts`, phase 4b); not deployed yet.
+- What it does: An `AWS::S3Vectors::VectorBucket` plus one `AWS::S3Vectors::Index` (1024 dims, cosine, float32) is the Knowledge Base's storage (`S3_VECTORS`). `AMAZON_BEDROCK_TEXT` and `AMAZON_BEDROCK_METADATA` are declared non-filterable at index creation, because Bedrock writes the chunk text and its metadata blob into every vector and both exceed the filterable-metadata size limit (and the setting can't be changed after creation).
+- Why we chose it: Pay-per-use with no cost floor: storage plus per-request charges, nothing running when idle. For ~3k words of policy (tens of chunks) at portfolio traffic, that's effectively free, and it's fully managed (no cluster, no schema, no capacity). Bedrock KB supports it natively, so nothing else changes in the RAG code.
+- Rejected alternative: OpenSearch Serverless, the classic KB default. Its minimum OCU footprint bills around the clock whether or not anyone queries, by far the largest line item in this project for a corpus this small. Also rejected: pgvector on our existing RDS Postgres, which avoids a new service but means owning a vector schema, an embedding-dimension migration story, index tuning, and Data API/Secrets Manager wiring for Bedrock to reach it, plus it couples the KB's availability to the transactional DB.
+- Tradeoff we accept: Higher, less predictable query latency than an in-memory ANN index, fewer search features (no hybrid/keyword search, limited filtering), and a younger service with less community knowledge. Dimension and distance metric are fixed at index creation; changing embedding models means a new index and a full re-ingest.
+- Revisit if: Retrieval latency becomes the dominant part of answer latency, or evals show we need hybrid (keyword + vector) search.
+
+## Titan Text Embeddings V2
+
+- Status: Defined in CDK (phase 4b); not deployed yet.
+- What it does: `amazon.titan-embed-text-v2:0` at 1024 dimensions (FLOAT32) embeds policy chunks at ingestion and queries at retrieval time.
+- Why we chose it: Native to Bedrock in us-east-1 (where the API runs), cheap per token, and 1024 dims is its full-quality setting while still small for S3 Vectors. English-only policy text doesn't need a multilingual model. One model ARN means the KB role's `bedrock:InvokeModel` grant is a single exact resource.
+- Rejected alternative: Cohere Embed v3 (English or multilingual). Competitive quality, but higher cost per token with no benefit we can show yet, and no multilingual need. Also rejected: Titan V2 at 256 or 512 dims, which saves storage that's already negligible at this corpus size, at some recall cost.
+- Tradeoff we accept: Locked to 1024 dims in the index; switching models or dimensions is a new index plus a full re-ingest, not a config change. Quality is unmeasured until the eval set exists.
+- Revisit if: Retrieval recall in evals is weak and a different embedding model measurably fixes it.
+
+## Docs upload via aws s3 sync, not BucketDeployment
+
+- Status: In use (`make kb-upload`; ingestion via `make kb-ingest`). Neither target is run by CI.
+- What it does: `kb-upload` reads the docs bucket name from the stack outputs and runs `aws s3 sync data/policies s3://<bucket>/ --delete` (Markdown only), making the bucket mirror the repo. `kb-ingest` starts an ingestion job, polls until COMPLETE/FAILED/STOPPED, prints the job statistics, and exits non-zero unless COMPLETE.
+- Why we chose it: Content changes and infra changes are different operations with different review needs. Editing a policy doc shouldn't require a CloudFormation deploy, and a deploy shouldn't silently rewrite the corpus. `sync --delete` is idempotent and keeps "what's in git" equal to "what's in the bucket", so a deleted doc also leaves the KB on the next ingest. Both steps call real AWS, so they stay explicit, manual commands.
+- Rejected alternative: `aws-s3-deployment.BucketDeployment`. It works, but adds a Lambda function, a Lambda layer with the AWS CLI, an assets bucket, and a custom resource, all with their own IAM (including broad S3 permissions), just to copy six Markdown files. It also re-uploads on every deploy and still doesn't trigger ingestion. Also rejected: `autoDeleteObjects`, a similar custom-resource Lambda that empties the bucket on stack deletion; emptying the bucket is a deliberate manual step instead.
+- Tradeoff we accept: Two extra manual commands after deploy (and after any doc change), and stack deletion fails until the docs bucket is emptied by hand. The bucket can drift from git if someone uploads directly; the next `kb-upload` resets it.
+- Revisit if: Docs change often enough that a CI job should upload and ingest on merge to main (with its own narrowly scoped role).
+
+## KB role scoping + confused-deputy conditions
+
+- Status: Defined in CDK (phase 4b), enforced by `infra/test/knowledge-base-stack.test.ts`.
+- What it does: The KB service role trusts only `bedrock.amazonaws.com`, and only when `aws:SourceAccount` is this account and `aws:SourceArn` matches `arn:aws:bedrock:us-east-1:<account>:knowledge-base/*`. Its one inline policy grants `s3:ListBucket` on the docs bucket and `s3:GetObject` on its objects (both also conditioned on `aws:ResourceAccount`), `bedrock:InvokeModel` on the Titan V2 model ARN only, and the five S3 Vectors actions AWS documents for KB ingest and query (`PutVectors`, `GetVectors`, `DeleteVectors`, `QueryVectors`, `GetIndex`; source: https://docs.aws.amazon.com/bedrock/latest/userguide/kb-permissions.html#kb-permissions-s3vectors) on that one index ARN. Tests fail on any Allow statement with `Action: "*"`, a service wildcard (`s3:*`), or `Resource: "*"`.
+- Why we chose it: The source conditions stop the confused-deputy case, where another account's Bedrock resource gets our role used on its behalf. Exact-ARN grants mean a misconfigured data source or a compromised KB can read only these docs and write only this index. The policy is inline on the role (not a separate `AWS::IAM::Policy`), so it exists before CloudFormation creates the KB, which checks the role's access at creation time.
+- Rejected alternative: The policy in AWS's own KB permissions doc, which also grants `bedrock:ListFoundationModels` and `bedrock:ListCustomModels` on `Resource: "*"`. Those are for the console's model picker, not for ingesting or querying with a fixed model ARN, so we leave them out. Also rejected: pinning `aws:SourceArn` to the exact KB id. That's circular in one stack (the role must exist before the KB, so the KB id isn't known yet) and would need a second deploy step to tighten.
+- Tradeoff we accept: `knowledge-base/*` in the trust condition allows any KB in this account and region to assume the role, not just ours. `s3:GetObject` needs the bucket's `/*` object ARN (scoped to this one bucket, not a global wildcard). The bucket policy that `enforceSSL` adds is a Deny on `s3:*`; the wildcard test exempts exactly that Deny (it narrows access) and checks it's present. If Bedrock ever needs an action not on AWS's list, ingestion will fail with AccessDenied until we add it deliberately.
+- Revisit if: We add a second KB or data source, or tighten `aws:SourceArn` to the KB id with a post-deploy update.
+
 ## Eval harness
 
 - Status: Planned (phase 5)
@@ -292,7 +328,7 @@ build; don't let it drift from the code.
 
 - **Redis**: Cut. No measured latency problem to justify a cache. Add back only if profiling shows a real hot path.
 - **SQS**: Stretch. Needed for async policy-document ingestion into the Bedrock Knowledge Base; ingestion runs synchronously until the core product works.
-- **CDK**: Stretch. `infra/` stays in the repo (currently just `BudgetStack`) but new infra is deployed by hand until CDK earns its place; its CI job keeps running so it doesn't rot.
+- **CDK**: In use for `BudgetStack` and `KnowledgeBaseStack` (phase 4b). CI builds, unit-tests, and synths both with no AWS credentials; deploying stays a manual, reviewed step (`cdk deploy` is never run by CI or by an agent). Other infra is still deployed by hand until CDK earns its place there too.
 - **Lambda**: Not needed in core. Natural fit for the stretch SQS ingestion worker (bursty, event-triggered).
 - **Spring Boot**: Rejected. Common at Amazon, but my Java is coursework-only; FastAPI is the choice I can defend in depth.
 - **Rate limiting**: Deferred. No Redis (see above) to back a token bucket in the app itself, and it's the wrong layer for it anyway. Revisit with an API Gateway usage plan or WAF rate-based rule at deploy time, in front of the API rather than inside it.
@@ -306,3 +342,11 @@ build; don't let it drift from the code.
 - Evidence: Repo audit on 2026-10-28 reproduced the collection error with no AWS env vars in the shell; the same suite passed (83 tests, 90% coverage) once dummy AWS vars were exported. On `fix/hermetic-tests`, `tests/unit/test_aws_isolation.py` fails with the same `MissingDependencyException` when the conftest fix is commented out, and passes with it restored.
 - Fix: `services/api/tests/conftest.py` forces dummy AWS credentials, unsets `AWS_PROFILE`, and points the AWS config/credentials files at a nonexistent path before any boto3 import; `tests/unit/test_aws_isolation.py` asserts boto3 resolves only those dummy env credentials. Did not add `botocore[crt]` (see "Hermetic AWS environment in tests").
 - Lesson: "CI is green" proved only that CI's environment was hermetic, not the suite. Isolation belongs in the test code itself, with a test that fails if it regresses, rather than in whatever env vars the runner happens to set.
+
+### 2026-10-29: Local `npm ci` failed on a non-writable npm cache; commit pushed before final verification
+
+- Symptom: During phase 4b's final pre-commit check, `npm ci` in `infra/` failed (`EACCES: permission denied, mkdir '~/.npm/_cacache/content-v2/sha512/c6/83'`, reported as `EEXIST`). It had already deleted `infra/node_modules`, so the next step failed with `sh: tsc: command not found` and synth exited 1. The commit (`072fffa`) and push still ran, because the verification and commit commands were chained with `;` rather than `&&`.
+- Root cause: Two separate faults. (1) Environment: part of the local npm cache under `~/.npm/_cacache` isn't writable by the current user, most likely root-owned files left by an earlier `sudo npm`. Nothing in the repo is involved, and CI starts from a clean cache. (2) Process: the verify-then-commit script didn't stop on failure, so a red check didn't block the commit.
+- Evidence: The `npm ci` error output above. Rerunning with `npm ci --cache <scratch dir>` installed cleanly from the unchanged `package-lock.json`, then `npm run build`, `jest` (16/16 passed), and `cdk synth` with AWS credentials made unreachable (exit 0) all passed on the pushed commit, with a clean working tree.
+- Fix: Reinstalled `infra/node_modules` from the lockfile using a throwaway npm cache and reran the full infra CI sequence against the pushed commit. Left `~/.npm` untouched; fixing its ownership needs `sudo` and is the owner's call (`sudo chown -R "$(id -u):$(id -g)" ~/.npm`).
+- Lesson: Chain verification and commit with `&&` (or `set -e`), so a red check can't produce a commit. When a check fails for environmental reasons, verify the exact pushed commit before reporting it as green.
