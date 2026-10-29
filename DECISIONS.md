@@ -678,6 +678,27 @@ build; don't let it drift from the code.
 - Fix: Ran `aws login` again.
 - Lesson: Expect to re-authenticate at the start of a working session. Logged for completeness.
 
+### 2026-10-29: Secret scan reported "clean" because its regex was rejected
+
+- Symptom: Claude Code's first scan of the `-04` results files reported no account IDs, keys or ARNs. But one of its `grep -E` patterns used `(?i:...)`, which grep's extended regex doesn't support. grep rejected the pattern, matched nothing, and the `! grep ...` check read that as "clean".
+- Root cause: The scan treated "no matches" as proof of absence without first showing it could find anything. A rejected pattern, a wrong path and a working scan of a clean file all look the same.
+- Evidence: The original command contained `(?i:secret_access|session_token)` inside `grep -Eq`. Claude Code noticed the unsupported syntax before relying on the result and re-scanned in Python.
+- Fix: Re-scanned in Python. Then, retroactively, every committed `evals/results/*.json` file plus `DECISIONS.md` and `README.md` was re-scanned with a Python scanner, after a **planted-positive control**. The control was a scratch file (never committed) containing the real account ID, a fake 12-digit account, a fake AKIA key, a secret-key-shaped value, a credential word, a private-key header, an email address and an ARN with an account. All 8 patterns fired on it, and the scanner exited 1. The real scan then found:
+  - all 8 results files clean
+  - `DECISIONS.md`: 2 "credential words" hits, both the environment-variable *names* `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` in the hermetic-tests docs, not values
+  - `README.md`: 2 "email" hits, both the placeholder `you@example.com` in example CDK commands
+
+  No account ID, 12-digit number, access key, secret value, private key or account-bearing ARN in any of them.
+- Lesson: A scan must prove it can find a planted positive before its "no matches" counts. Run it on a file containing a fake account ID first. Prefer one scanner implementation (Python `re`) over shell regex dialects.
+
+### 2026-10-29: Claude Code asserted what the reviewer's 91 integration errors were, without seeing them
+
+- Symptom: While logging "Reviewer's local test services stopped between sessions", Claude Code first wrote that all 91 errors were connection or setup failures.
+- Root cause: Claude Code filled in a plausible detail it hadn't observed. All it had was the account owner's statement that there were 91 errors and that they cleared after a restart.
+- Evidence: The first draft of that entry's Evidence line. It was caught before the commit, and the committed text says "The account owner's record of the reviewer's run: 91 integration errors, which cleared once the services were restarted."
+- Fix: Restated as the reviewer's record. The same check was applied to the other entries built from the owner's account (PR #1–#5 reviews, the CLI comma failure, the truncated `cdk diff`), and their Evidence lines say whose record they are.
+- Lesson: Evidence lines state only what was observed, and say who observed it. Don't upgrade a report into a finding.
+
 ## Known open issues
 
 Not yet fixed. Each needs a decision or a change in its own reviewed phase.
@@ -685,4 +706,5 @@ Not yet fixed. Each needs a decision or a change in its own reviewed phase.
 - **Budget amount mismatch:** `infra/cdk.json` sets `budgetAmount` to 25, but the live AWS budget was created by hand at $15. The code and the account disagree. Either update `cdk.json` or deploy `BudgetStack` so they match.
 - **`npm audit` findings:** 8 vulnerabilities in `infra` dev dependencies, 1 of them critical. Not yet triaged: check whether any are reachable (they're dev and synth tooling, not deployed code) and upgrade or document each.
 - **Budget alert email:** budget alerts go to a different email address than the GitHub and Claude account. The owner needs to confirm whether that's intentional.
+- **Stale README:** the README's general Results table and layout rows are out of date. They say 83 backend tests and 90% coverage, `evals` is "placeholder", and `infra` is "`BudgetStack` only". Only the RAG Results subsection is current.
 - **PR #3's description is wrong:** it still says "16/16 pass, 11 of them new"; the actual split was 10 new and 6 existing. PR #3 is merged; the correction of record is in Incidents, "PR #3's description misstates the Jest split".
