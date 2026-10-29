@@ -144,11 +144,16 @@ build; don't let it drift from the code.
 
 ## Bedrock (Knowledge Bases, Guardrails, tool calling, structured outputs)
 
-- Status: In progress (4a): Knowledge Base retrieval + Converse answer endpoint (`POST /v1/chat/sessions/{id}/messages`), code and fake-backed tests only; no KB provisioned or real Bedrock call made yet. Guardrails, tool calling, and structured outputs not started.
+- Status: In progress (4c). The Knowledge Base is deployed by the account owner: `KnowledgeBaseStack`, us-east-1, 6 docs ingested, 0 failed. Live Retrieve and Converse calls have been verified by hand. The answer endpoint (`POST /v1/chat/sessions/{id}/messages`) exists with fake-backed tests. `rag_min_score` is still the untuned 0.3 until the labeled retrieval eval (`make eval-retrieval`) has been run. Guardrails, tool calling and structured outputs aren't started.
 - What it does: Knowledge Bases retrieve from ingested policy docs; Guardrails filter unsafe input/output; tool calling lets the model query seller/order data; structured outputs give the API typed, validated responses.
 - Why we chose it: Managed retrieval and safety instead of a hand-built RAG pipeline and moderation layer.
 - Rejected alternative: Self-hosted RAG with vLLM. I've built this before and know the ops cost firsthand: serving infra, a vector DB, and hand-rolled safety filtering, all first-party maintenance burden.
 - Tradeoff we accept: Vendor lock-in to Bedrock's APIs and models; Guardrails add latency and per-call cost on top of the base model call.
+- Answer model: Claude Haiku 4.5 through the US cross-region inference profile `us.anthropic.claude-haiku-4-5-20251001-v1:0`, set in config (`BEDROCK_MODEL_ID`), never in code.
+  - Why: it's available to this account (verified with a live Converse call), it's the cheapest and fastest Claude model available here, and a grounded short answer over five ~300-token chunks doesn't need a larger one. The `us.` profile spreads load across US regions only, so requests and data stay in US geography.
+  - Rejected: the `global.` inference profile. It may route requests to any commercial region worldwide, so there's no data-geography guarantee for seller questions, and a little more throughput isn't worth that here.
+  - Rejected: Claude Haiku 5.5 (`us.anthropic.claude-haiku-5-5`). Live Converse returned AccessDeniedException ("not available for this account"; see Incidents). This is an account constraint, not a quality call. Revisit when it becomes available.
+  - Tradeoff: an older model generation, and the inference profile's region set is AWS-managed.
 - Revisit if: Retrieval quality or cost doesn't hold up under real evals.
 
 ## Retrieve + Converse, not RetrieveAndGenerate
@@ -214,6 +219,15 @@ build; don't let it drift from the code.
   - **Shared execution role:** the bootstrap is per account and region, so `BudgetStack` can no longer be deployed through it (it was always a manual deploy).
 - Future stacks: **any new stack, resource type or property that needs a new permission must widen this policy explicitly in a reviewed diff.** That means updating `cfn-exec-policy.json`, the README's sources and exceptions, and `REVIEWED_RESOURCE_TYPES` in the test, then running `make deploy-policy-update`. Falling back to `AdministratorAccess`, even "temporarily", isn't an option.
 - Revisit if: We add several stacks with very different needs (then one execution policy per bootstrap qualifier), or move deploys to CI (then the CI role's own permissions need the same review).
+
+## Retrieval threshold from a labeled set, not a guess
+
+- Status: Tooling in place (phase 4c): `evals/retrieval_golden.jsonl`, `evals/calibrate_retrieval.py`, `make eval-retrieval`. The run and the choice of `rag_min_score` come next. The setting stays 0.3 until then.
+- What it does: 20 in-scope questions, each labeled with its expected source doc and key fact, and 10 out-of-scope questions (general knowledge, other platforms, nonsense, seller-sounding look-alikes) go through the live KB with the same retriever the route uses. The script reports hit@1 and hit@5, the top-score distributions for both classes, and the highest threshold that keeps at least 95% of in-scope questions answerable, along with how many out-of-scope questions that threshold refuses. The threshold is computed on each question's top score, because the route refuses exactly when the top chunk is below `rag_min_score`.
+- Why we chose it: The relevance floor decides two failure modes at once: refusing questions the docs answer (too high) and sending off-topic context to the model (too low). The original 0.3 was a guess, and a live spot check already shows it's wrong. On-topic top scores were 0.64–0.69 and "What is the capital of France?" scored about 0.52, so 0.3 lets nearly everything through. A labeled set turns the choice into a measured tradeoff that can be re-run whenever the embedding model, chunking or corpus changes, and leaves a results file to point to.
+- Rejected alternative: Hand-picking a value from a few spot checks (e.g. "0.55 looks right"). Quick, but unrepeatable and blind to how close the classes are. Also rejected: relying on the model to say "I don't know" with no floor. That pays for a model call on every off-topic question and trusts the prompt alone to resist irrelevant context.
+- Tradeoff we accept: 20 in-scope questions is a small sample. "≥95% kept" means losing at most one, so the threshold is only as reliable as the score gap in this sample. The same author wrote the policies and the questions, which likely inflates in-scope scores (see `evals/README.md`). The script uses a top-score threshold only; it doesn't measure answer quality.
+- Revisit if: Real seller questions exist (replace or extend the set), the classes overlap so much that no threshold separates them (then consider a reranker or query classification), or the embedding model or chunking changes.
 
 ## Eval harness
 
@@ -339,7 +353,7 @@ build; don't let it drift from the code.
 - Status: In use (`services/api/tests/conftest.py`, guarded by `tests/unit/test_aws_isolation.py`)
 - What it does: The top-level test conftest forces dummy `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN`, sets `AWS_DEFAULT_REGION=us-east-1`, unsets `AWS_PROFILE` / `AWS_DEFAULT_PROFILE`, and points `AWS_CONFIG_FILE` / `AWS_SHARED_CREDENTIALS_FILE` at a path that doesn't exist, before any test module imports boto3. A guard test asserts boto3 resolves exactly those dummy env credentials.
 - Why we chose it: Tests must never be able to sign a request as a real AWS identity, and must behave the same on a laptop with a live AWS login as in CI. Env-var credentials are first in botocore's provider chain, so forcing them there (and hiding `~/.aws`) cuts off every later provider (profile, SSO, `login`, IMDS) in one place, with no per-test fixture to forget.
-- Rejected alternative: Adding `botocore[crt]` as a dependency. It makes the collection error go away, but by letting tests successfully resolve the developer's real credentials, which is the actual bug. Also rejected: relying on CI's job-level dummy env vars (the status quo), which protects CI only and leaves every local run exposed.
+- Rejected alternative: Adding `botocore[crt]` as a dependency to make the test failure go away. That would let tests successfully resolve the developer's real credentials, which is the actual bug. (Phase 4c later added `botocore[crt]` as a **dev** dependency for a different reason: so the live eval and smoke scripts can use an `aws login` session without exported keys. Tests are unaffected, because this conftest still forces env-var dummy credentials, which sit first in the provider chain, and the guard test still asserts `method == "env"`.) Also rejected: relying on CI's job-level dummy env vars (the status quo), which protects CI only and leaves every local run exposed.
 - Tradeoff we accept: The conftest overwrites any AWS env vars exported in the shell, so a test can't deliberately use real AWS (e.g., a live Bedrock smoke test) without opting out explicitly. That's intended: anything that talks to real AWS belongs outside this suite and gets run by hand.
 - Revisit if: We add a deliberately live-AWS test tier; it should live in its own directory/marker with its own conftest, not weaken this one.
 
@@ -388,4 +402,12 @@ build; don't let it drift from the code.
   1. Any "permission X is not needed" claim must cite the synthesized template, not general docs or another template.
   2. "Could not create a change set" in `cdk diff` blocks deploy approval until `cdk diff -v` shows the reason.
 - Lesson: Verify claims about who resolves what against the synthesized template, not against comments in someone else's template. Policy tests must cover everything CloudFormation evaluates with the role (`Parameters` and `Rules` too), not just `Resources`. Treat "Could not create a change set" from `cdk diff` as a signal to run `cdk diff -v` and read the reason, not as noise to deploy past.
+
+### 2026-10-29: Claude Haiku 5.5 not available to this account (AccessDeniedException)
+
+- Symptom: A live Converse call with model `us.anthropic.claude-haiku-5-5` returned `AccessDeniedException`, with a message saying the model is not available for this account. The same call with `us.anthropic.claude-haiku-4-5-20251001-v1:0` succeeded.
+- Root cause: Account-level model availability. Haiku 5.5 appears in `bedrock list-foundation-models` (the 2026-10-28 audit listed `anthropic.claude-haiku-5-5`), but the catalog listing isn't the same as invocation access for this account. Nothing in the code or IAM was wrong: the same credentials invoked Haiku 4.5 fine.
+- Evidence: The account owner's terminal. Converse with Haiku 5.5 gave AccessDeniedException ("not available for this account"); Converse with Haiku 4.5 via the `us.` profile returned an answer. The audit's model list is in the 2026-10-28 audit output.
+- Fix: Config swap. The answer model is Haiku 4.5 via `us.anthropic.claude-haiku-4-5-20251001-v1:0`, documented in `.env.example` and as the default in `scripts/rag_smoke.py` / `make rag-smoke`. No code change, since the model id was already a setting. Decision recorded in the Bedrock entry, with Haiku 5.5 logged as an account constraint.
+- Lesson: A model showing up in `list-foundation-models` doesn't mean the account can invoke it. Verify access with a real, minimal Converse call before wiring a model id into config, docs or defaults.
 
