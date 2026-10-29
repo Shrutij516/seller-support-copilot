@@ -901,6 +901,53 @@ build; don't let it drift from the code.
 - Fix: `dev-live` is now a chain of ordinary prerequisite targets (`dev-live-check`, `dev-live-db`, `migrate`, `dynamodb-init`, `dev-live-seed`), with no `$(MAKE)` in any recipe. `make -n dev-live` now only prints (exit 0, no running services afterwards).
 - Lesson: `make -n` isn't always a dry run. Avoid `$(MAKE)` in recipes that have side effects, and confirm a dry run had no effects before trusting it.
 
+### 2026-10-29: Empty push while committing `cf2092b` (recurrence of the heredoc incident)
+
+- Symptom: The first commit attempt for the local live run pushed `docs/local-live-run` at `69e7e4f` (the existing `main` merge commit) with no new commit. The real commit `cf2092b` was pushed afterwards.
+- Root cause:
+  - **zsh doesn't word-split `$F`.** The file list was stored in a plain variable, so the secret scan and `git add` each got a single nonexistent path.
+  - **The heredoc ended the `&&` chain.** `git commit -F - <<'EOF'` was followed by `git log && git push` on a line after the heredoc. Those ran as a new command list, so they ran even though `git add` had failed.
+- Evidence: The command output shows `pathspec '...' did not match any files`, then `git log` showing `69e7e4f`, then `* [new branch] docs/local-live-run -> docs/local-live-run`.
+- Fix: Redone with a zsh array (`"${F[@]}"`) and the commit message in a file (`git commit -F <file>`), so the whole chain is one `&&` list. Nothing wrong reached the remote: the pushed ref pointed at a commit already on `main`.
+- Lesson: This is a recurrence. The heredoc lesson has to be applied, not just recorded: never put anything after a heredoc in a chain, and write commit messages to a file. Use arrays for file lists in zsh.
+
+### 2026-10-29: Repo-root `.env` holds stale Cognito values
+
+- Symptom: The repo-root `.env` (the owner's local, gitignored file) still has `COGNITO_ISSUER`, `COGNITO_JWKS_URL` and `COGNITO_APP_CLIENT_ID` for an old user pool.
+- Root cause: It was written for an earlier pool, and `make live-env` only writes `services/api/.env` and `apps/web/.env.local`.
+- Evidence: What reads it, checked with `git grep` and `docker compose config`:
+  - **Docker Compose:** it auto-loads the project-root `.env` for `${...}` interpolation. `docker compose config` shows a non-empty `COGNITO_APP_CLIENT_ID` for the `api` service. That container is started only by `make up` (`docker compose up -d --build --wait`).
+  - **`make dev-live`:** starts only `postgres` and `dynamodb-local`, which don't use these variables.
+  - **The host API:** runs from `services/api`, so pydantic-settings reads `services/api/.env`.
+  - **Next.js:** reads only `apps/web/.env*`.
+  - **The Makefile:** doesn't `include` it.
+- Fix: None yet. It's the owner's file and wasn't changed or deleted. The local live run is unaffected; `make up` would start the API container against the old pool.
+- Lesson: When regenerating env files, list every file that can supply the same variables, including Compose's implicit root `.env`.
+
+### 2026-10-29: "New session" disabled with no hint (UX)
+
+- Symptom: On `/chat`, the "New session" button stayed disabled. The owner thought chat was broken.
+- Root cause: `apps/web/src/app/chat/page.tsx` disables the button until a title is typed (`!title.trim()`). The only cue is the placeholder "What's this about?" and 50% opacity; nothing says a title is required.
+- Evidence: The owner's report during the live run, and the `disabled={mutation.isPending || !title.trim()}` line.
+- Fix: Not yet (listed under Known open issues). Options: allow an empty title with a default, or show a visible "Enter a title to start" hint.
+- Lesson: A disabled control needs a visible reason.
+
+### 2026-10-29: Assistant markdown renders as literal asterisks (UX bug)
+
+- Symptom: The refund answer showed `**30 days**` with the asterisks visible instead of bold text.
+- Root cause: The model replies in Markdown, but `apps/web/src/components/chat/ChatThread.tsx` renders `message.content` as plain text (`<p className="whitespace-pre-wrap">`).
+- Evidence: The reviewer-verified screenshot of the refund answer.
+- Fix: Not yet (listed under Known open issues). Either render a safe Markdown subset (no raw HTML), or tell the model to answer in plain text.
+- Lesson: Check what format the model actually outputs against what the UI renders, on a live answer, not just on fixtures.
+
+### 2026-10-29: Citation snippet shows the parent chunk's intro, not the supporting sentence
+
+- Symptom: The refund answer cited [1] `returns-and-refunds.md`, but the snippet was the policy's intro, not the "30 days" sentence.
+- Root cause: `rag/prompt.py` builds each snippet as `chunk.text[:CITATION_SNIPPET_MAX_CHARS]` (300). With hierarchical chunking, Retrieve returns the **parent** chunk's text, so the first 300 characters are the start of a large section (often the doc's intro), not the matched child.
+- Evidence: The reviewer-verified screenshot of the refund answer's Sources panel.
+- Fix: Not now (listed under Known open issues). Proposed: build the snippet from the matched child chunk, or from a window around the best-matching sentence in the parent.
+- Lesson: When the chunking strategy changes, re-check everything downstream of retrieval, including the citation UI.
+
 ## Known open issues
 
 Not yet fixed. Each needs a decision or a change in its own reviewed phase.
@@ -915,6 +962,9 @@ Not yet fixed. Each needs a decision or a change in its own reviewed phase.
 - **The app isn't deployed to AWS.** The end-to-end run is a local web app and local API, using AWS-managed Cognito (`AuthStack`) and the AWS-managed Bedrock Knowledge Base (`KnowledgeBaseStack`). There's no hosted frontend (S3 + CloudFront) or hosted API (ECS) yet.
 - **The local API runs with the developer's own AWS credentials** (`aws login`), so a least-privilege runtime role (an ECS task role with only `bedrock:Retrieve` on the KB and `bedrock:InvokeModel` on the answer model) isn't exercised or tested yet.
 - **Secrets Manager isn't used.** No application secret exists in this setup: the web client is public, Cognito and Bedrock ids are config, and Postgres and DynamoDB are local with local-only credentials. A deployed database password would need it.
+- **"New session" is disabled with no hint** until a title is typed (`apps/web/src/app/chat/page.tsx`). See Incidents.
+- **Assistant Markdown renders as plain text,** so `**bold**` shows literal asterisks (`ChatThread.tsx`). See Incidents.
+- **Citation snippets show the first 300 characters of the parent chunk,** which with hierarchical chunking is usually the doc's intro, not the supporting sentence. The proposed fix is to build the snippet from the matched child chunk. See Incidents.
 
 ## Resolved issues
 

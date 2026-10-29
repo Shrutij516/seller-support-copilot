@@ -161,6 +161,24 @@ cd apps/web && corepack pnpm dev                                    # http://loc
 
 `make dev-live` starts only Postgres and DynamoDB Local; it doesn't build the API image. DynamoDB Local runs with `-sharedDb`, so the table that `make dynamodb-init` creates with dummy keys is visible to the API's real session keys. The CSP isn't applied under `next dev`; it only applies to the production build. Limits of this setup are listed in DECISIONS.md, under Known open issues.
 
+### Local end-to-end run (verified 2026-10-29)
+
+Run with the steps above (local web app and API, deployed Cognito user pool and Bedrock Knowledge Base). The reviewer checked the screenshots:
+
+- **Sign-in:** the Cognito hosted-UI sign-in as the seller test user worked, and the nav showed the signed-in user.
+- **Answerable question:** "How many days does a buyer have to request a refund?" was answered "A buyer can request a refund within **30 days** of the order's delivery date [1]..." with one source. That matches `returns-and-refunds.md`.
+- **Off-topic question:** "What is the capital of France?" got the exact refusal message from `rag/prompt.py`. Retrieval scored below `rag_min_score` (0.55), so the model was never called.
+
+Honest limits of this run:
+- The app isn't deployed to AWS. Only Cognito and the Bedrock Knowledge Base are AWS-managed.
+- The local API uses the developer's own AWS credentials, so a least-privilege runtime role isn't exercised.
+- No Secrets Manager: this setup has no application secret.
+
+Known UI issues found during the run (DECISIONS.md, Known open issues):
+- "New session" is disabled, with no hint, until a title is typed.
+- Answer markdown renders as literal asterisks.
+- Citation snippets show the parent chunk's intro, not the sentence that supports the answer.
+
 ### Checks
 
 ```bash
