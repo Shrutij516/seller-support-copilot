@@ -620,3 +620,69 @@ build; don't let it drift from the code.
 - Evidence: The account owner's record of the truncated diff file and its complete re-run. The missing pre-ingest check was proven afterward instead: a per-data-source metadata grep of `list-vectors` found 0 vectors for the old data source `NXNCY57HMT` and 36 for the new `AUKZILCLZK`, the positive control showing the grep works.
 - Fix: The diff was re-run to completion. The purge was demonstrated with the per-data-source grep and its positive control.
 - Lesson: Wait for the prompt and exit code before capturing output, and run checks in the stated order. A check proven after the fact needs a positive control to mean anything.
+
+### 2026-10-29: `git checkout main` run outside the repo
+
+- Symptom: The account owner ran `git checkout main` from the home directory and got `fatal: not a git repository`.
+- Root cause: The command block assumed the shell was already in the repo. The new terminal started in `~`.
+- Evidence: The `fatal: not a git repository` error.
+- Fix: `cd` to the repo first, with the path quoted because it contains a space: `cd "/Users/.../NEW PROJECTS/seller-support-copilot"`.
+- Lesson: Every command block starts with the `cd`.
+
+### 2026-10-29: Duplicate pull request attempts from GitHub's "Compare & pull request" banner
+
+- Symptom: For PR #2, clicking GitHub's "Compare & pull request" banner gave "Pull request creation failed: A pull request already exists". Claude Code had already opened the PR. The same near-miss happened later for `feat/kb-hierarchical-chunking`; that time the form was closed without creating anything.
+- Root cause: GitHub shows the banner for any recently pushed branch, whether or not a PR exists, and two people were acting on the same branch.
+- Evidence: The GitHub error message for PR #2, and the account owner's record of the later near-miss.
+- Fix: No duplicate was created either time.
+- Lesson: Open PRs only through the PR link Claude Code reports. Ignore the push banner.
+
+### 2026-10-29: Claude Code path slip in phase 4c (`..` instead of `../..`)
+
+- Symptom: A help-check of the new eval scripts failed with "can't open file" because the path was wrong.
+- Root cause: From `services/api`, the repo root is `../..`, not `..`. Claude Code used `..`.
+- Evidence: The "No such file or directory" error for `services/api/../evals/calibrate_retrieval.py`.
+- Fix: Caught on the rerun, which used `../..` (or ran from the repo root). No files were affected.
+- Recurrence: it happened again while committing this entry. A chain used `cd ../infra` from `services/api` (`no such file or directory: ../infra`). The `&&` chain stopped before the commit, and the rerun used the absolute repo path.
+- Lesson: Use paths relative to the repo root, or absolute paths, in commands run from subdirectories. Prefer one absolute `cd` per step over chained relative ones.
+
+### 2026-10-29: Claude Code passed two revisions to `git rev-parse --short` during the rebase
+
+- Symptom: While rebasing `feat/kb-hierarchical-chunking`, a chain stopped with `fatal: Needed a single revision`.
+- Root cause: `git rev-parse --short` accepts only one revision, and Claude Code passed two (`HEAD` and `origin/feat/kb-hierarchical-chunking`).
+- Evidence: The error output. The `&&` chain stopped before `git rebase`, so nothing changed.
+- Fix: Printed each revision separately, then rebased.
+- Lesson: The chain did its job. Check a command's argument rules before putting it at the front of a chain.
+
+### 2026-10-29: Docker Hub unreachable during local verification
+
+- Symptom: `make up` failed while building the API image: `failed to solve: DeadlineExceeded: context deadline exceeded`, resolving `docker.io/docker/dockerfile:1`. This happened in the same session as "Piped output masked a failed step".
+- Root cause: The local machine couldn't reach Docker Hub. This was environmental, not a repo or Dockerfile fault.
+- Evidence: The BuildKit error when resolving the image config for the Dockerfile frontend.
+- Fix: The integration tests don't use the API container; they run the app in-process. So they ran against `docker compose up -d --wait postgres dynamodb-local`, using cached images. CI builds the API image on its own runners.
+- Lesson: Know which services a test run actually needs, so a registry outage doesn't block verification. Say plainly when local runs used a reduced stack.
+
+### 2026-10-29: Reviewer's local test services stopped between sessions
+
+- Symptom: The reviewer's independent run showed 91 integration "errors".
+- Root cause: The reviewer's own verification environment, local Postgres and a DynamoDB emulator, had stopped between sessions. Not a code fault.
+- Evidence: The account owner's record of the reviewer's run: 91 integration errors, which cleared once the services were restarted.
+- Fix: Restarted the reviewer's test services. The suite then passed.
+- Lesson: Start and health-check the test dependencies before trusting a test count. Logged so the reviewer's numbers can be reproduced.
+
+### 2026-10-29: AWS session expired overnight
+
+- Symptom: AWS CLI calls failed with "Your session has expired".
+- Root cause: The `aws login` session uses short-lived credentials, and they expire. This is expected behavior.
+- Evidence: The CLI's session-expired message.
+- Fix: Ran `aws login` again.
+- Lesson: Expect to re-authenticate at the start of a working session. Logged for completeness.
+
+## Known open issues
+
+Not yet fixed. Each needs a decision or a change in its own reviewed phase.
+
+- **Budget amount mismatch:** `infra/cdk.json` sets `budgetAmount` to 25, but the live AWS budget was created by hand at $15. The code and the account disagree. Either update `cdk.json` or deploy `BudgetStack` so they match.
+- **`npm audit` findings:** 8 vulnerabilities in `infra` dev dependencies, 1 of them critical. Not yet triaged: check whether any are reachable (they're dev and synth tooling, not deployed code) and upgrade or document each.
+- **Budget alert email:** budget alerts go to a different email address than the GitHub and Claude account. The owner needs to confirm whether that's intentional.
+- **PR #3's description is wrong:** it still says "16/16 pass, 11 of them new"; the actual split was 10 new and 6 existing. PR #3 is merged; the correction of record is in Incidents, "PR #3's description misstates the Jest split".
