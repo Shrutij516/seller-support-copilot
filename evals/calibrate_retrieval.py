@@ -31,6 +31,8 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
+from matching import contains_all_terms
+
 from copilot_api.config import Settings
 from copilot_api.rag.bedrock import (
     BedrockKnowledgeBaseRetriever,
@@ -64,6 +66,10 @@ class ChunkRecord:
     score: float
     approx_tokens: int
     text_sha1: str
+    # Start of the chunk text, so a results file shows where a chunk begins (boundary splits).
+    excerpt: str = ""
+    # Whether this chunk alone contains every key term of the question (None: out-of-scope).
+    has_fact: bool | None = None
 
 
 @dataclass
@@ -76,6 +82,9 @@ class QuestionResult:
     top_score: float | None
     hit_at_1: bool | None
     hit_at_5: bool | None
+    # Passage level: a chunk from expected_source that itself contains every key term.
+    fact_hit_at_1: bool | None = None
+    fact_hit_at_5: bool | None = None
     chunks: list[ChunkRecord] = field(default_factory=list)
 
 
@@ -119,10 +128,25 @@ def approx_tokens(text: str) -> int:
     return round(len(text.split()) * WORDS_TO_TOKENS)
 
 
+def chunk_has_fact(question: GoldenQuestion, chunk: RetrievedChunk) -> bool:
+    """The chunk comes from the expected doc AND contains every key term. Requiring the source
+    stops a generic number (e.g. "14") in an unrelated doc from counting as the fact.
+    """
+    return (
+        question.expected_source is not None
+        and chunk.source == question.expected_source
+        and contains_all_terms(question.key_terms or [], chunk.text)
+    )
+
+
 def score_question(question: GoldenQuestion, chunks: list[RetrievedChunk]) -> QuestionResult:
-    """Chunks are assumed to be in the retriever's order (best first)."""
+    """Chunks are assumed to be in the retriever's order (best first). Source-level hit@k asks
+    "did any chunk come from the right doc?"; fact-level asks "did a chunk contain the answer?",
+    which is the one that matters once docs are split into several chunks.
+    """
     sources = [c.source for c in chunks]
     expected = question.expected_source
+    facts = [chunk_has_fact(question, c) for c in chunks] if expected else []
     return QuestionResult(
         id=question.id,
         question=question.question,
@@ -132,12 +156,16 @@ def score_question(question: GoldenQuestion, chunks: list[RetrievedChunk]) -> Qu
         top_score=max((c.score for c in chunks), default=None),
         hit_at_1=None if expected is None else sources[:1] == [expected],
         hit_at_5=None if expected is None else expected in sources[:5],
+        fact_hit_at_1=None if expected is None else any(facts[:1]),
+        fact_hit_at_5=None if expected is None else any(facts[:5]),
         chunks=[
             ChunkRecord(
                 source=c.source,
                 score=c.score,
                 approx_tokens=approx_tokens(c.text),
                 text_sha1=hashlib.sha1(c.text.encode(), usedforsecurity=False).hexdigest(),
+                excerpt=" ".join(c.text.split())[:120],
+                has_fact=chunk_has_fact(question, c) if expected else None,
             )
             for c in chunks
         ],
@@ -212,13 +240,23 @@ def summarize(results: list[QuestionResult]) -> dict[str, Any]:
     out_top = [r.top_score for r in out_scope if r.top_score is not None]
     by_slice: dict[str, dict[str, Any]] = {}
     for r in in_scope:
-        s = by_slice.setdefault(r.slice, {"n": 0, "hit_at_1": 0, "hit_at_5": 0})
+        s = by_slice.setdefault(
+            r.slice, {"n": 0, "hit_at_1": 0, "hit_at_5": 0, "fact_hit_at_1": 0, "fact_hit_at_5": 0}
+        )
         s["n"] += 1
-        s["hit_at_1"] += bool(r.hit_at_1)
-        s["hit_at_5"] += bool(r.hit_at_5)
+        for key in ("hit_at_1", "hit_at_5", "fact_hit_at_1", "fact_hit_at_5"):
+            s[key] += bool(getattr(r, key))
+
+    def rate(key: str) -> float | None:
+        return sum(bool(getattr(r, key)) for r in in_scope) / len(in_scope) if in_scope else None
+
     return {
-        "hit_at_1": sum(bool(r.hit_at_1) for r in in_scope) / len(in_scope) if in_scope else None,
-        "hit_at_5": sum(bool(r.hit_at_5) for r in in_scope) / len(in_scope) if in_scope else None,
+        "hit_at_1": rate("hit_at_1"),
+        "hit_at_5": rate("hit_at_5"),
+        "fact_hit_at_1": rate("fact_hit_at_1"),
+        "fact_hit_at_5": rate("fact_hit_at_5"),
+        # In-scope questions whose doc was retrieved but no top-5 chunk contains the fact.
+        "fact_misses_at_5": [r.id for r in in_scope if r.hit_at_5 and not r.fact_hit_at_5],
         "hits_by_slice": by_slice,
         "top_score_in_scope": distribution(in_top),
         "top_score_out_of_scope": distribution(out_top),
@@ -235,10 +273,17 @@ def _fmt(d: dict[str, Any]) -> str:
 
 
 def print_report(summary: dict[str, Any], out_path: Path) -> None:
-    print(f"hit@1 (in-scope): {summary['hit_at_1']:.2%}")
-    print(f"hit@5 (in-scope): {summary['hit_at_5']:.2%}")
+    print(
+        f"source hit@1 {summary['hit_at_1']:.2%}  hit@5 {summary['hit_at_5']:.2%}   "
+        f"fact hit@1 {summary['fact_hit_at_1']:.2%}  hit@5 {summary['fact_hit_at_5']:.2%}"
+    )
     for name, s in summary["hits_by_slice"].items():
-        print(f"  slice {name}: hit@1 {s['hit_at_1']}/{s['n']}  hit@5 {s['hit_at_5']}/{s['n']}")
+        print(
+            f"  slice {name}: source {s['hit_at_1']}/{s['n']} @1, {s['hit_at_5']}/{s['n']} @5;"
+            f" fact {s['fact_hit_at_1']}/{s['n']} @1, {s['fact_hit_at_5']}/{s['n']} @5"
+        )
+    if summary["fact_misses_at_5"]:
+        print(f"  right doc, no fact-bearing chunk in top 5: {summary['fact_misses_at_5']}")
     print(f"top score, in-scope:     {_fmt(summary['top_score_in_scope'])}")
     print(f"top score, out-of-scope: {_fmt(summary['top_score_out_of_scope'])}")
     if summary["no_chunks"]:

@@ -20,6 +20,9 @@ POLICIES_DIR = REPO_ROOT / "data" / "policies"
 
 
 def _load_calibration_module() -> ModuleType:
+    evals_dir = str(REPO_ROOT / "evals")
+    if evals_dir not in sys.path:
+        sys.path.insert(0, evals_dir)  # the script imports its sibling `matching` module
     path = REPO_ROOT / "evals" / "calibrate_retrieval.py"
     spec = importlib.util.spec_from_file_location("calibrate_retrieval", path)
     assert spec is not None and spec.loader is not None
@@ -194,7 +197,7 @@ def test_run_writes_results_file_without_calling_bedrock(
     assert written["summary"]["hit_at_1"] == 1.0
     assert written["summary"]["threshold"]["out_of_scope_refused"] == 10
     assert len(written["results"]) == 30
-    assert "hit@1 (in-scope): 100.00%" in capsys.readouterr().out
+    assert "source hit@1 100.00%" in capsys.readouterr().out
 
 
 def test_write_new_results_never_overwrites(tmp_path: Path) -> None:
@@ -233,3 +236,72 @@ def test_run_twice_same_day_keeps_both_files(
     assert first != second
     assert first.exists() and second.exists()
     assert second.name.endswith("-02.json")
+
+
+def _fees_question() -> Any:
+    return cal.GoldenQuestion(
+        id="in-09",
+        question="When an order gets refunded, do I get my commission back?",
+        in_scope=True,
+        slice="paraphrase",
+        expected_source="fees.md",
+        expected_fact="The referral fee is returned",
+        key_terms=["referral fee", "returns|returned"],
+    )
+
+
+def _text_chunk(source: str, text: str, score: float = 0.7) -> RetrievedChunk:
+    return RetrievedChunk(text=text, source=source, score=score)
+
+
+def test_fact_hit_requires_a_chunk_containing_every_key_term() -> None:
+    # The in-09 failure shape: the right doc is retrieved, but the chunk starts after the fact.
+    split = _text_chunk(
+        "fees.md", "The per-item fee (Standard plan) is not refunded, as it covers..."
+    )
+    whole = _text_chunk(
+        "fees.md", "Kestrel Market returns the referral fee for that item to the seller."
+    )
+
+    missed = cal.score_question(_fees_question(), [split])
+    found_second = cal.score_question(_fees_question(), [split, whole])
+
+    assert (missed.hit_at_5, missed.fact_hit_at_5) == (True, False)
+    assert (found_second.fact_hit_at_1, found_second.fact_hit_at_5) == (False, True)
+    assert [c.has_fact for c in found_second.chunks] == [False, True]
+    assert found_second.chunks[0].excerpt.startswith("The per-item fee (Standard plan)")
+
+
+def test_fact_hit_requires_the_expected_source() -> None:
+    wrong_doc = _text_chunk("disputes.md", "We returns the referral fee... (wrong document)")
+
+    result = cal.score_question(_fees_question(), [wrong_doc])
+
+    assert (result.hit_at_5, result.fact_hit_at_5) == (False, False)
+
+
+def test_out_of_scope_has_no_fact_values() -> None:
+    q = cal.GoldenQuestion(
+        id="o",
+        question="?",
+        in_scope=False,
+        slice="nonsense",
+        expected_source=None,
+        expected_fact=None,
+    )
+    result = cal.score_question(q, [_text_chunk("fees.md", "referral fee returns")])
+
+    assert (result.fact_hit_at_1, result.fact_hit_at_5) == (None, None)
+    assert result.chunks[0].has_fact is None
+
+
+def test_summary_separates_source_hits_from_fact_hits() -> None:
+    q = _fees_question()
+    split = _text_chunk("fees.md", "The per-item fee (Standard plan) is not refunded.")
+    whole = _text_chunk("fees.md", "Kestrel Market returns the referral fee.")
+
+    summary = cal.summarize([cal.score_question(q, [split]), cal.score_question(q, [whole])])
+
+    assert (summary["hit_at_5"], summary["fact_hit_at_5"]) == (1.0, 0.5)
+    assert summary["fact_misses_at_5"] == ["in-09"]
+    assert summary["hits_by_slice"]["paraphrase"]["fact_hit_at_5"] == 1

@@ -483,3 +483,30 @@ build; don't let it drift from the code.
 - Fix: Converted the remaining two tables (`account-health.md` score bands, `shipping-and-delivery-slas.md` delivery SLAs) to bullet lists with identical facts and numbers. Added `tests/unit/test_policy_docs.py`, which fails on any line starting with `|` in `data/policies/`. Re-upload and re-ingest are the owner's step.
 - Lesson: "Chunked at 300 tokens" is a configuration, not an observation. Measure actual chunk sizes per source after every ingest (the retrieval eval now prints them). When a result looks wrong, change one variable on one file and keep a control group before reaching for a different chunking strategy.
 
+### 2026-10-29: Fixed-size chunking split facts across chunks after table removal
+
+- Symptom: After all markdown tables were converted to lists and the KB re-ingested, every policy doc split into 3 chunks (max ~310 tokens). In-scope answer accuracy then **regressed from 20/20 to 18/20** (`evals/results/answers-2026-10-29-03.json`, `rag_min_score` 0.55). Out-of-scope rose to 10/10. Two in-scope failures:
+  - **in-09** ("When an order gets refunded, do I get my commission back?"): the model answered "no", which is wrong.
+  - **in-15** ("What order defect rate do I need to stay under?"): the expected "under 1%" was missing.
+
+  The retrieval eval (`retrieval-2026-10-29-03.json`) still reported hit@1 95% and hit@5 100%.
+- Root cause: 300-token FIXED_SIZE chunks cut through the facts.
+  - **in-09:** a boundary split. The top `fees.md` chunk starts at "The per-item fee (Standard plan) is not refunded...". The sentence before it, "returns the referral fee for that item to the seller", landed in a chunk that wasn't retrieved. The model saw only the "not refunded" half and answered from it.
+  - **in-15:** a retrieval miss. The `account-health.md` chunk holding "Order defect rate ... Must stay under 1%" (the doc's intro, which lists all four score inputs) wasn't in the top 5 at all.
+
+  Separately, the retrieval eval masked both. Its hit@k only checked that some chunk came from `expected_source`, which stays true when the fact-bearing chunk is missing.
+- Evidence: The two chunk excerpts above, from the account owner's inspection of the live Retrieve output for in-09 and in-15, and the failures listed in `answers-2026-10-29-03.json`. Before the tables were removed, the three table-containing docs were single whole-file chunks, so "right doc retrieved" implied "fact retrieved". That's why the earlier 20/20 didn't expose the gap.
+- Fix:
+  - **Measurement (this branch):** `evals/calibrate_retrieval.py` now reports fact-level hit@1 and hit@5 alongside source-level hit. A chunk counts only if it comes from `expected_source` and itself contains every key term, using the same matcher as the answer eval (`evals/matching.py`). Questions where the right doc was retrieved but no top-5 chunk holds the fact are listed. Each chunk's first 120 characters are now saved, so boundary splits are visible in the results file.
+  - **Retrieval:** **pending** hierarchical chunking on the next branch (`feat/kb-hierarchical-chunking`): small child chunks for matching, larger parent chunks returned as context.
+  - **Caveat:** in-09's golden `key_terms` is just `["referral fee"]`. That phrase also appears in the fee-schedule chunk, so fact-level hit may still count in-09 as found. Tightening it (e.g. adding "returns|returned") would also change the answer eval's scoring, so it's left for a reviewed change.
+- Lesson: Source-level hit@k masks passage-level misses once docs have more than one chunk. "The right document came back" isn't "the answer came back". Measure retrieval at the level the model consumes (the chunk), and re-check retrieval metrics whenever chunking changes, even when the change was a fix.
+
+### 2026-10-29: Piped output masked a failed step in the &&-chained verify command
+
+- Symptom: During phase 4c's final checks, `make up` failed (`failed to solve: DeadlineExceeded: context deadline exceeded`), yet the `&&` chain kept going into the tests. It stopped only when integration setup errored. No commit was made.
+- Root cause: Each step was piped to `tail` for brevity (`make up 2>&1 | tail -1 && ...`). Without `pipefail`, a pipeline's exit status is the last command's (`tail`, which succeeded), so `&&` saw success. The `make up` failure itself was environmental: the API image build couldn't reach Docker Hub to resolve the `docker/dockerfile:1` frontend.
+- Evidence: The chain's output shows `make: *** [up] Error 1` followed by later steps running, and then `ERROR at setup of test_readyz_503_names_failed_dependency`. `git log` still showed the previous commit (`6e7e968`), and `git status` listed the uncommitted files.
+- Fix: Verify-and-commit chains now start with `set -o pipefail`. With Docker Hub unreachable, the integration tests ran against `docker compose up -d --wait postgres dynamodb-local` (cached images, no build). The tests use the in-process app, not the API container. Everything passed, and only then was the commit made.
+- Lesson: `&&` only guards what it can see. Piping to `tail` or `grep` hides exit codes unless `pipefail` is set. This extends the 4b lesson ("chain with &&") to "chain with && under pipefail".
+

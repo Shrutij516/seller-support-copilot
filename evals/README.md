@@ -9,7 +9,11 @@ Safety evals come later.
   - **20 in-scope:** each has an `expected_source` (a file in `data/policies/`) and the `expected_fact` a correct answer must contain. All six policy docs are covered. `slice` is `direct` (worded close to the policy) or `paraphrase` (reworded, scenario-style).
   - **10 out-of-scope:** `expected_source: null`. Slices are `general-knowledge`, `other-platform` (Amazon, Etsy, eBay), `nonsense`, and `lookalike`: seller-account questions that sound in-domain but that no policy covers (2FA, sales tax).
 - **`calibrate_retrieval.py`:** run with `make eval-retrieval` from the repo root. It calls the live Knowledge Base (id read from the `KnowledgeBaseStack` output) through the same `BedrockKnowledgeBaseRetriever` the chat route uses, with `top_k=5`. It prints and saves to `results/retrieval-<date>.json`:
-  - hit@1 and hit@5 over in-scope questions, overall and per slice
+  - hit@1 and hit@5 over in-scope questions, overall and per slice, at two levels:
+    - **source:** some top-k chunk comes from `expected_source`
+    - **fact:** some top-k chunk from `expected_source` itself contains every `key_terms` entry, matched exactly like the answer eval (`matching.py`).
+
+    Source-level hits overstate retrieval once docs are split into several chunks. Questions where the doc came back but no top-5 chunk held the fact are listed by id. Each chunk's first 120 characters are saved, so boundary splits are visible.
   - min / median / max of the top score, in-scope vs out-of-scope
   - the highest threshold that keeps at least 95% of in-scope questions answerable, and how many out-of-scope questions it refuses. The route refuses when no chunk clears `rag_min_score`, so this is computed on each question's top score.
   - distinct chunks per source and the largest chunk. Token counts are **approximate**: whitespace words × 1.33, not a real tokenizer.
@@ -32,7 +36,7 @@ The run prints pass rates per slice, every failure (question, first 200 characte
 
 ## Results files
 
-Both scripts write to `results/` and never overwrite. The first run of a day is `<kind>-<date>.json`, and later runs that day are `<kind>-<date>-02.json`, `-03` and so on (exclusive create). The committed baseline is `retrieval-2026-10-29.json` and `answers-2026-10-29.json`. `answers-2026-10-29-02.json` is the rerun after the "do not offer related information" prompt rule: out-of-scope 8/10, up from 7/10. `retrieval-2026-10-29-02.json` is the chunking experiment run, after converting only `fees.md`'s table: fees.md went from 1 chunk to 3, and the controls stayed at 1.
+Both scripts write to `results/` and never overwrite. The first run of a day is `<kind>-<date>.json`, and later runs that day are `<kind>-<date>-02.json`, `-03` and so on (exclusive create). The committed baseline is `retrieval-2026-10-29.json` and `answers-2026-10-29.json`. `answers-2026-10-29-02.json` is the rerun after the "do not offer related information" prompt rule: out-of-scope 8/10, up from 7/10. `retrieval-2026-10-29-02.json` is the chunking experiment run, after converting only `fees.md`'s table: fees.md went from 1 chunk to 3, and the controls stayed at 1. The `-03` pair is after all tables were removed: every doc at 3 chunks, answers in-scope 18/20 (in-09 boundary split, in-15 retrieval miss) and out-of-scope 10/10. Those runs predate fact-level hit, so their retrieval file has source-level hit only.
 
 ## Known limitations of this set
 
@@ -41,4 +45,5 @@ Both scripts write to `results/` and never overwrite. The first run of a day is 
 - **Some safe non-answers fail the out-of-scope check.** Two kinds of zero-citation answer are safe but don't match the deterministic refusal pattern, so they're scored as failures:
   - a clarification request (`out-08`, "asdf qwer zxcv")
   - a refusal worded outside the pattern (`out-07`, "purple monkey dishwasher refund velocity", answered "The context provided doesn't contain information about..."). This is deliberate: the pattern isn't widened to chase individual answers, because every widening also risks accepting real non-refusals. Read these failures by hand. If a clarification is what the product should do, decide that explicitly rather than editing the regex to make a number go up.
+- **Key terms are coarse for some questions.** Fact-level hit only knows the terms it's given. in-09's `key_terms` is just `["referral fee"]`, which also appears in the fee-schedule chunk, so a chunk can "contain the fact" without stating that the fee is returned. Tightening key terms changes the answer eval's scoring too, so it's a reviewed change.
 - **One KB snapshot.** Scores depend on the embedding model, chunking and the indexed docs. Re-run after any of those change.
