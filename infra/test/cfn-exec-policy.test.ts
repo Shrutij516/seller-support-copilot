@@ -4,7 +4,12 @@ import { join } from "node:path";
 import { App } from "aws-cdk-lib";
 import { Template } from "aws-cdk-lib/assertions";
 
-import { KB_REGION, KnowledgeBaseStack } from "../lib/knowledge-base-stack";
+import {
+  KB_REGION,
+  KnowledgeBaseStack,
+  VECTOR_BUCKET_NAME,
+  VECTOR_INDEX_NAME,
+} from "../lib/knowledge-base-stack";
 
 interface Statement {
   readonly Sid?: string;
@@ -15,7 +20,13 @@ interface Statement {
 }
 
 const POLICY_PATH = join(__dirname, "..", "bootstrap", "cfn-exec-policy.json");
-const KB_ROLE_PATTERN = "arn:aws:iam::*:role/KnowledgeBaseStack-*";
+// Policy variables can't stand in for the account field of an ARN (IAM: "Where you can use
+// policy variables"), so the committed policy carries this placeholder and
+// `make deploy-policy-*` substitutes the caller's account into a temp copy at create time.
+const ACCOUNT_PLACEHOLDER = "{{ACCOUNT_ID}}";
+const KB_ROLE_PATTERN = `arn:aws:iam::${ACCOUNT_PLACEHOLDER}:role/KnowledgeBaseStack-*`;
+const VECTOR_BUCKET_ARN = `arn:aws:s3vectors:us-east-1:${ACCOUNT_PLACEHOLDER}:bucket/${VECTOR_BUCKET_NAME}`;
+const VECTOR_INDEX_ARN = `${VECTOR_BUCKET_ARN}/index/${VECTOR_INDEX_NAME}`;
 const DOCS_BUCKET_PATTERN = "arn:aws:s3:::knowledgebasestack-*";
 
 // Actions AWS gives no resource-level permissions for, each with its proof in
@@ -110,6 +121,38 @@ describe("CloudFormation execution policy (bootstrap/cfn-exec-policy.json)", () 
         sid: s.Sid,
         region: "us-east-1",
       });
+    }
+  });
+
+  test("no Resource ARN has an account wildcard; account is the placeholder or absent", () => {
+    const offenders: string[] = [];
+    for (const s of statements) {
+      for (const arn of resourcesOf(s).filter((r) => r !== "*")) {
+        // arn:partition:service:region:account:resource. S3 bucket ARNs have no account.
+        const account = arn.split(":")[4];
+        const ok = account === ACCOUNT_PLACEHOLDER || (account === "" && arn.startsWith("arn:aws:s3:::"));
+        if (!ok) offenders.push(`${s.Sid}: ${arn}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  test("S3 Vectors access is limited to the stack's exact vector bucket and index ARNs", () => {
+    const vectorStatements = statements.filter((s) =>
+      actionsOf(s).some((a) => a.startsWith("s3vectors:")),
+    );
+    const resources = vectorStatements.map((s) => resourcesOf(s));
+    expect(resources).toEqual([[VECTOR_BUCKET_ARN], [VECTOR_INDEX_ARN]]);
+  });
+
+  test("renders to a placeholder-free policy with a 12-digit account in every ARN", () => {
+    const rendered = readFileSync(POLICY_PATH, "utf8").replaceAll(ACCOUNT_PLACEHOLDER, "123456789012");
+    expect(rendered).not.toContain("{{");
+    const parsed = JSON.parse(rendered) as { Statement: Statement[] };
+    for (const s of parsed.Statement) {
+      for (const arn of asArray(s.Resource).filter((r) => r !== "*")) {
+        expect(arn.split(":")[4]).toMatch(arn.startsWith("arn:aws:s3:::") ? /^$/ : /^\d{12}$/);
+      }
     }
   });
 

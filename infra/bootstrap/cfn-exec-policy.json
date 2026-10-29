@@ -18,7 +18,7 @@
         "iam:TagRole",
         "iam:UntagRole"
       ],
-      "Resource": "arn:aws:iam::*:role/KnowledgeBaseStack-*",
+      "Resource": "arn:aws:iam::{{ACCOUNT_ID}}:role/KnowledgeBaseStack-*",
       "Condition": {
         "StringEquals": { "aws:RequestedRegion": "us-east-1" }
       }
@@ -27,7 +27,7 @@
       "Sid": "KbStackRolePassToBedrockOnly",
       "Effect": "Allow",
       "Action": "iam:PassRole",
-      "Resource": "arn:aws:iam::*:role/KnowledgeBaseStack-*",
+      "Resource": "arn:aws:iam::{{ACCOUNT_ID}}:role/KnowledgeBaseStack-*",
       "Condition": {
         "StringEquals": {
           "iam:PassedToService": "bedrock.amazonaws.com",
@@ -89,7 +89,7 @@
         "s3vectors:UntagResource",
         "s3vectors:ListTagsForResource"
       ],
-      "Resource": "arn:aws:s3vectors:us-east-1:*:bucket/*",
+      "Resource": "arn:aws:s3vectors:us-east-1:{{ACCOUNT_ID}}:bucket/seller-copilot-kb-vectors",
       "Condition": {
         "StringEquals": { "aws:RequestedRegion": "us-east-1" }
       }
@@ -105,7 +105,7 @@
         "s3vectors:UntagResource",
         "s3vectors:ListTagsForResource"
       ],
-      "Resource": "arn:aws:s3vectors:us-east-1:*:bucket/*/index/*",
+      "Resource": "arn:aws:s3vectors:us-east-1:{{ACCOUNT_ID}}:bucket/seller-copilot-kb-vectors/index/seller-policies",
       "Condition": {
         "StringEquals": { "aws:RequestedRegion": "us-east-1" }
       }
@@ -126,7 +126,7 @@
         "bedrock:UntagResource",
         "bedrock:ListTagsForResource"
       ],
-      "Resource": "arn:aws:bedrock:us-east-1:*:knowledge-base/*",
+      "Resource": "arn:aws:bedrock:us-east-1:{{ACCOUNT_ID}}:knowledge-base/*",
       "Condition": {
         "StringEquals": { "aws:RequestedRegion": "us-east-1" }
       }

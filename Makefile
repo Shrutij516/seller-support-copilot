@@ -11,6 +11,16 @@ KB_DOCS_DIR := data/policies
 CFN_EXEC_POLICY_NAME ?= copilot-cfn-exec
 CFN_EXEC_POLICY_FILE := infra/bootstrap/cfn-exec-policy.json
 aws_account = $$(aws sts get-caller-identity --query Account --output text)
+# The committed policy has {{ACCOUNT_ID}} placeholders: IAM policy variables can't replace the
+# account field of an ARN. This renders a copy for the calling account into a private temp file
+# (deleted on exit), so the account ID is never written into the repo. Sets $$account, $$rendered.
+render_cfn_exec_policy = \
+	account=$(aws_account); \
+	echo "$$account" | grep -Eq '^[0-9]{12}$$' || { echo "Unexpected account id: '$$account'" >&2; exit 1; }; \
+	rendered=$$(mktemp "$${TMPDIR:-/tmp}/cfn-exec-policy.XXXXXX"); \
+	trap 'rm -f "$$rendered"' EXIT; \
+	sed "s/{{ACCOUNT_ID}}/$$account/g" $(CFN_EXEC_POLICY_FILE) > "$$rendered"; \
+	if grep -q '{{' "$$rendered"; then echo "Unrendered placeholder in policy" >&2; exit 1; fi
 kb_output = $$(aws cloudformation describe-stacks --region $(KB_REGION) --stack-name $(KB_STACK) \
 	--query 'Stacks[0].Outputs[?OutputKey==`$(1)`].OutputValue' --output text)
 CLIENT_DIR := packages/api-client
@@ -118,14 +128,16 @@ kb-ingest: ## Start a KB ingestion job and poll until COMPLETE/FAILED; prints st
 
 deploy-policy-create: ## Create the scoped CloudFormation execution policy (first time only)
 	@set -e; \
+	$(render_cfn_exec_policy); \
 	aws iam create-policy --policy-name $(CFN_EXEC_POLICY_NAME) \
-		--policy-document file://$(CFN_EXEC_POLICY_FILE) \
+		--policy-document "file://$$rendered" \
 		--description "CloudFormation execution policy for CDK bootstrap: KnowledgeBaseStack only" \
 		--query Policy.Arn --output text
 
 deploy-policy-update: ## Publish the policy JSON as the new default version (prunes oldest if at the 5-version limit)
 	@set -e; \
-	arn="arn:aws:iam::$(aws_account):policy/$(CFN_EXEC_POLICY_NAME)"; \
+	$(render_cfn_exec_policy); \
+	arn="arn:aws:iam::$$account:policy/$(CFN_EXEC_POLICY_NAME)"; \
 	count=$$(aws iam list-policy-versions --policy-arn "$$arn" --query 'length(Versions)' --output text); \
 	if [ "$$count" -ge 5 ]; then \
 		oldest=$$(aws iam list-policy-versions --policy-arn "$$arn" \
@@ -134,7 +146,7 @@ deploy-policy-update: ## Publish the policy JSON as the new default version (pru
 		aws iam delete-policy-version --policy-arn "$$arn" --version-id "$$oldest"; \
 	fi; \
 	aws iam create-policy-version --policy-arn "$$arn" \
-		--policy-document file://$(CFN_EXEC_POLICY_FILE) --set-as-default \
+		--policy-document "file://$$rendered" --set-as-default \
 		--query 'PolicyVersion.{version:VersionId,default:IsDefaultVersion}' --output json
 
 cdk-bootstrap: ## Bootstrap CDK in us-east-1 with the scoped execution policy instead of AdministratorAccess

@@ -8,6 +8,8 @@ import {
   KB_REGION,
   KB_S3VECTORS_ACTIONS,
   KnowledgeBaseStack,
+  VECTOR_BUCKET_NAME,
+  VECTOR_INDEX_NAME,
 } from "../lib/knowledge-base-stack";
 
 type Json = Record<string, unknown>;
@@ -123,7 +125,11 @@ describe("KnowledgeBaseStack", () => {
   test("S3 Vectors bucket and a 1024-dim cosine float32 index with Bedrock keys non-filterable", () => {
     template.resourceCountIs("AWS::S3Vectors::VectorBucket", 1);
     template.resourceCountIs("AWS::S3Vectors::Index", 1);
+    template.hasResourceProperties("AWS::S3Vectors::VectorBucket", {
+      VectorBucketName: "seller-copilot-kb-vectors",
+    });
     template.hasResourceProperties("AWS::S3Vectors::Index", {
+      IndexName: "seller-policies",
       Dimension: 1024,
       DistanceMetric: "cosine",
       DataType: "float32",
@@ -247,6 +253,13 @@ describe("KnowledgeBaseStack", () => {
       if (statement.Effect !== "Allow") offenders.push(`${where}: unexpected ${String(statement.Effect)}`);
     }
     expect(offenders).toEqual([]);
+  });
+
+  test("vector bucket and index names satisfy the S3 Vectors naming rules", () => {
+    // https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-vectors-buckets-naming.html
+    expect(VECTOR_BUCKET_NAME).toMatch(/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/);
+    // https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-vectors-indexes.html#s3-vectors-indexes-naming
+    expect(VECTOR_INDEX_NAME).toMatch(/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/);
   });
 
   test("outputs the KB id, data source id, and docs bucket name", () => {

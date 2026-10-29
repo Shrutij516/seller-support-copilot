@@ -6,6 +6,10 @@
 
 Usage, from the repo root: `make deploy-policy-create` (first time) or `make deploy-policy-update` (after editing the JSON), then `make cdk-bootstrap`. All three change real AWS resources and are run by hand after review. CI never runs them.
 
+**Account placeholder.** The committed JSON has `{{ACCOUNT_ID}}` wherever an ARN's account field goes. It isn't a valid policy on its own. The `deploy-policy-*` targets get the caller's account from `aws sts get-caller-identity` and check that it's 12 digits. They then `sed` the account into a private `mktemp` file and refuse to continue if any `{{` remains. The rendered copy is passed to IAM and deleted on exit, so the account ID is never written into the repo.
+
+Why not `${aws:PrincipalAccount}`: IAM allows policy variables in `Resource` "only in the resource portion of the ARN. This portion of the ARN appears after the fifth colon (:). You can't use a variable to replace parts of the ARN before the fifth colon, such as the service or account." ([Where you can use policy variables](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_variables.html#policy-vars-wheretouse))
+
 ## How the action list was derived
 
 1. **Resource types** come from the synthesized template (`cdk synth`, then `cdk.out/KnowledgeBaseStack.template.json`): `AWS::S3::Bucket`, `AWS::S3::BucketPolicy`, `AWS::S3Vectors::VectorBucket`, `AWS::S3Vectors::Index`, `AWS::IAM::Role`, `AWS::Bedrock::KnowledgeBase`, `AWS::Bedrock::DataSource`, and `AWS::CDK::Metadata`. The last is a metadata-only resource that CloudFormation needs no permissions for.
@@ -39,15 +43,17 @@ That's the only one. Every other granted action supports a resource ARN and is s
 
 | Resource | Pattern | Why it's predictable (or not) |
 |---|---|---|
-| KB service role | `arn:aws:iam::*:role/KnowledgeBaseStack-*` | The stack sets no `RoleName`, so CloudFormation names it `<stack name>-<logical id>-<random>`, for example `KnowledgeBaseStack-KnowledgeBaseRoleA2B317B9-ABC123...`. That's 57 characters, under the 64 limit, so it isn't truncated. Pattern from [Resource naming](https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-properties-name.html) ("`MyStack-MyBucket-abcdefghijk1`"). |
+| KB service role | `arn:aws:iam::{{ACCOUNT_ID}}:role/KnowledgeBaseStack-*` | The stack sets no `RoleName`, so CloudFormation names it `<stack name>-<logical id>-<random>`, for example `KnowledgeBaseStack-KnowledgeBaseRoleA2B317B9-ABC123...`. That's 57 characters, under the 64 limit, so it isn't truncated. Pattern from [Resource naming](https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-properties-name.html) ("`MyStack-MyBucket-abcdefghijk1`"). |
 | Docs bucket | `arn:aws:s3:::knowledgebasestack-*` | Same `<stack>-<logical id>-<random>` scheme. S3 names must be lowercase, so the generated name is `knowledgebasestack-docsbucketecea003f-<random>` (about 50 characters, under 63, not truncated). |
-| S3 Vectors bucket | `arn:aws:s3vectors:us-east-1:*:bucket/*` | **Not predictable.** The [VectorBucket docs](https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-s3vectors-vectorbucket.html) only say CloudFormation "generates a unique ID", with no stack-name prefix promised. The tightest honest scope is every vector bucket in this account and region. |
-| S3 Vectors index | `arn:aws:s3vectors:us-east-1:*:bucket/*/index/*` | Same: [Index docs](https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-s3vectors-index.html) say "generates a unique ID". |
-| Knowledge Base + data source | `arn:aws:bedrock:us-east-1:*:knowledge-base/*` | KB ARNs use a service-generated id (`knowledge-base/${KnowledgeBaseId}`). Data source actions authorize against the parent KB ARN (SAR). |
+| S3 Vectors bucket | `arn:aws:s3vectors:us-east-1:{{ACCOUNT_ID}}:bucket/seller-copilot-kb-vectors` | **Exact.** The stack sets `vectorBucketName` explicitly, because CloudFormation's generated vector bucket names have no documented prefix ([VectorBucket docs](https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-s3vectors-vectorbucket.html): "generates a unique ID"). The ARN format `arn:${Partition}:s3vectors:${Region}:${Account}:bucket/${BucketName}` is from the [S3 Vectors SAR](https://docs.aws.amazon.com/service-authorization/latest/reference/list_amazons3vectors.html). The name follows the [vector bucket naming rules](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-vectors-buckets-naming.html): 3–63 characters, `a-z0-9-`, starting and ending with a letter or number. |
+| S3 Vectors index | `arn:aws:s3vectors:us-east-1:{{ACCOUNT_ID}}:bucket/seller-copilot-kb-vectors/index/seller-policies` | **Exact.** The stack sets `indexName` explicitly. The SAR format is `.../bucket/${BucketName}/index/${IndexName}`. The name follows the [index naming rules](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-vectors-indexes.html#s3-vectors-indexes-naming): 3–63 characters, `a-z0-9.-`, starting and ending with a letter or number. |
+| Knowledge Base + data source | `arn:aws:bedrock:us-east-1:{{ACCOUNT_ID}}:knowledge-base/*` | KB ARNs use a service-generated id (`knowledge-base/${KnowledgeBaseId}`). Data source actions authorize against the parent KB ARN (SAR). |
 
-Account is `*` in the IAM, S3 Vectors and Bedrock ARNs. An identity policy can't reach resources in another account unless that account's own resource policy also allows it, so this matches "this account" in practice.
+No `Resource` has an account wildcard. Every ARN with an account field uses the rendered account, and S3 bucket ARNs have no account field at all.
 
-**Proposed tightening (not done here, since it changes `KnowledgeBaseStack`):** give the vector bucket and index explicit names, e.g. `vectorBucketName: "knowledgebasestack-vectors"` and `indexName: "policies-v1"`. The S3 Vectors statements could then be scoped to exact ARNs. The cost: explicitly named resources can't be replaced in place, so changing the dimension or metric would mean a new name, such as `policies-v2`.
+**Cost of the explicit vector names:**
+- **No in-place replacement.** CloudFormation can't replace these two resources while keeping the same name. Changing the dimension, distance metric or non-filterable keys means picking a new index name (e.g. `seller-policies-v2`) and updating this policy in the same reviewed diff.
+- **One stack per account and region.** Vector bucket names are unique per account and region, so a second copy of `KnowledgeBaseStack` there (e.g. a staging stack) would collide. It would need its own names and its own policy statements.
 
 ## Handler permissions deliberately left out (55)
 
