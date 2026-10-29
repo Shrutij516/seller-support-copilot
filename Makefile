@@ -34,7 +34,7 @@ CLIENT_DIR := packages/api-client
 # Uses the pnpm version pinned in package.json via corepack (ships with Node 24).
 PNPM ?= corepack pnpm
 
-.PHONY: up down test test-integration lint typecheck migrate dynamodb-init seed coverage openapi openapi-check link-user api-client api-client-check kb-upload kb-ingest deploy-policy-create deploy-policy-update cdk-bootstrap eval-retrieval rag-smoke eval-answers auth-create-user auth-env
+.PHONY: up down test test-integration lint typecheck migrate dynamodb-init seed coverage openapi openapi-check link-user api-client api-client-check kb-upload kb-ingest deploy-policy-create deploy-policy-update cdk-bootstrap eval-retrieval rag-smoke eval-answers auth-create-user auth-env live-env dev-live dev-live-check dev-live-db dev-live-seed
 
 up: ## Start Postgres, DynamoDB Local, and the API; wait until healthy
 	docker compose up -d --build --wait
@@ -195,24 +195,11 @@ auth-create-user: ## Invite-only user: make auth-create-user EMAIL=you@example.c
 	@if [ -z "$(EMAIL)" ] || { [ "$(GROUP)" != "seller" ] && [ "$(GROUP)" != "admin" ]; }; then \
 		echo 'Usage: make auth-create-user EMAIL=<email> GROUP=seller|admin' >&2; exit 1; \
 	fi
-	@# The temporary password is read with echo off and sent on stdin (--cli-input-json
-	@# file:///dev/stdin): never echoed, never in a file, never in a process argument list.
-	@set -e; \
-	pool=$(call auth_output,UserPoolId); \
-	if [ -z "$$pool" ] || [ "$$pool" = "None" ]; then echo "No UserPoolId output on stack $(AUTH_STACK)." >&2; exit 1; fi; \
-	trap 'stty echo 2>/dev/null' EXIT INT TERM; \
-	printf 'Temporary password for $(EMAIL) (not shown): ' >&2; stty -echo; IFS= read -r pw; stty echo; echo >&2; \
-	[ -n "$$pw" ] || { echo "Empty password." >&2; exit 1; }; \
-	esc=$$(printf '%s' "$$pw" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'); \
-	sub=$$(printf '{"UserPoolId":"%s","Username":"%s","TemporaryPassword":"%s","MessageAction":"SUPPRESS","UserAttributes":[{"Name":"email","Value":"%s"},{"Name":"email_verified","Value":"true"}]}' \
-		"$$pool" "$(EMAIL)" "$$esc" "$(EMAIL)" \
-		| aws cognito-idp admin-create-user --region $(KB_REGION) --cli-input-json file:///dev/stdin \
-			--query "User.Attributes[?Name=='sub'].Value | [0]" --output text); \
-	unset pw esc; \
-	aws cognito-idp admin-add-user-to-group --region $(KB_REGION) --user-pool-id "$$pool" \
-		--username "$(EMAIL)" --group-name "$(GROUP)"; \
-	echo "Created $(EMAIL) in group $(GROUP) (sub $$sub). They must set a new password at first sign-in."; \
-	if [ "$(GROUP)" = "seller" ]; then echo "Link to a seller row: make link-user EMAIL=<seed seller email> SUB=$$sub"; fi
+	@# getpass + one boto3 AdminCreateUser call: the password is validated before any AWS call
+	@# and never echoed, written to a file, or passed in argv. Not the aws CLI: it reads
+	@# --cli-input-json file:// sources twice, so stdin/FIFO input arrives empty (see DECISIONS).
+	@uv run --project $(API_DIR) python scripts/cognito_create_user.py \
+		--email "$(EMAIL)" --group "$(GROUP)" --stack $(AUTH_STACK) --region $(KB_REGION)
 
 auth-env: ## Print env lines for apps/web/.env.local and services/api/.env from the AuthStack outputs (both gitignored)
 	@set -e; \
@@ -231,4 +218,40 @@ auth-env: ## Print env lines for apps/web/.env.local and services/api/.env from 
 	echo "COGNITO_ISSUER=$$issuer"; \
 	echo "COGNITO_JWKS_URL=$$jwks"; \
 	echo "COGNITO_APP_CLIENT_ID=$$client"
+
+live-env: ## Write services/api/.env and apps/web/.env.local from the AuthStack/KnowledgeBaseStack outputs (both gitignored)
+	@set -e; \
+	issuer=$(call auth_output,Issuer); client=$(call auth_output,UserPoolClientId); \
+	domain=$(call auth_output,HostedDomain); kb_id=$(call kb_output,KnowledgeBaseId); \
+	for v in "$$issuer" "$$client" "$$domain" "$$kb_id"; do \
+		if [ -z "$$v" ] || [ "$$v" = "None" ]; then echo "Missing a stack output (AuthStack / KnowledgeBaseStack deployed?)." >&2; exit 1; fi; \
+	done; \
+	uv run --project $(API_DIR) python scripts/write_live_env.py --issuer "$$issuer" --client-id "$$client" \
+		--domain "$$domain" --kb-id "$$kb_id" --model-id "$(RAG_SMOKE_MODEL)"
+
+# dev-live is split into prerequisites (run in order) instead of calling $(MAKE) inside one
+# recipe: GNU make executes any recipe line that references $(MAKE) even under `make -n`, so a
+# "dry run" of the old single-recipe version would really have started Docker and the API.
+dev-live-check:
+	@for f in $(API_DIR)/.env $(WEB_DIR)/.env.local; do \
+		[ -f "$$f" ] || { echo "Missing $$f: run 'make live-env' first." >&2; exit 1; }; \
+	done
+
+dev-live-db:
+	docker compose up -d --wait postgres dynamodb-local
+
+dev-live-seed:
+	@sellers=$$(docker compose exec -T postgres psql -U copilot -d copilot -tAc "select count(*) from sellers"); \
+	if [ "$$sellers" = "0" ]; then \
+		cd $(API_DIR) && AWS_REGION=us-east-1 AWS_ACCESS_KEY_ID=dummy AWS_SECRET_ACCESS_KEY=dummy \
+			uv run python -m copilot_api.scripts.seed; \
+	else echo "Seed data present ($$sellers sellers); not re-seeding."; fi
+
+dev-live: dev-live-check dev-live-db migrate dynamodb-init dev-live-seed ## Local app against real AWS (Cognito + Bedrock KB): DBs in Docker, API on the host on :8000
+	@echo
+	@echo "API: http://localhost:8000 (this terminal; Ctrl-C to stop). Uses your 'aws login' session for Bedrock."
+	@echo "Web: in a second terminal run:  cd $(WEB_DIR) && corepack pnpm dev   then open http://localhost:3000"
+	@echo
+	cd $(API_DIR) && env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN \
+		uv run uvicorn copilot_api.main:app --host 127.0.0.1 --port 8000
 

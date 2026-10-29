@@ -139,6 +139,28 @@ cp apps/web/.env.example apps/web/.env.local    # fill in Cognito values
 corepack pnpm --filter @copilot/web run dev     # http://localhost:3000, needs the API running
 ```
 
+### Run against real AWS (local app, AWS-managed Cognito and Bedrock)
+
+The web app and API run on your machine. Sign-in goes through the deployed Cognito user pool (`AuthStack`) and answers come from the deployed Bedrock Knowledge Base (`KnowledgeBaseStack`). The API uses **your own AWS session** (`aws login`) for Bedrock, and nothing is deployed by these steps. Prerequisites:
+- both stacks are deployed
+- a Cognito user exists (`make auth-create-user EMAIL=... GROUP=seller`)
+- Docker is running
+
+```bash
+aws login                      # fresh session; the API on the host uses it for Bedrock
+make live-env                  # writes services/api/.env + apps/web/.env.local from the stack outputs (gitignored)
+make dev-live                  # Postgres + DynamoDB Local in Docker, migrate, table init, seed once, API on :8000
+```
+
+In a second terminal:
+
+```bash
+make link-user EMAIL=fwilson@johnson.com SUB=<your Cognito sub>   # once: maps your login to a seed seller
+cd apps/web && corepack pnpm dev                                    # http://localhost:3000
+```
+
+`make dev-live` starts only Postgres and DynamoDB Local; it doesn't build the API image. DynamoDB Local runs with `-sharedDb`, so the table that `make dynamodb-init` creates with dummy keys is visible to the API's real session keys. The CSP isn't applied under `next dev`; it only applies to the production build. Limits of this setup are listed in DECISIONS.md, under Known open issues.
+
 ### Checks
 
 ```bash

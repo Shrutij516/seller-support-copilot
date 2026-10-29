@@ -375,6 +375,25 @@ build; don't let it drift from the code.
 - Tradeoff we accept: The classic hosted UI looks dated and has fewer customization options, with no passkeys, email MFA or access-token customization. Switching plans later is possible without recreating the pool.
 - Revisit if: We need passkeys, email MFA, access-token claim customization, or branded login pages.
 
+## Local live run against real AWS (`make live-env`, `make dev-live`)
+
+- Status: In use (branch `docs/local-live-run`). Runbook in README, "Run against real AWS".
+- What it does: Runs the web app and API on the developer's machine against the deployed Cognito user pool and Bedrock Knowledge Base.
+  - **`make live-env`** writes the gitignored `services/api/.env` and `apps/web/.env.local` from the stack outputs. It writes no AWS credentials, and backs up any file it replaces.
+  - **`make dev-live`** starts only Postgres and DynamoDB Local in Docker, runs migrations and table init, seeds once (only when `sellers` is empty), then runs the API on the host (`uvicorn`, port 8000) with the developer's `aws login` session for Bedrock.
+  - **DynamoDB Local now runs with `-sharedDb`.**
+  - **`make auth-create-user`** now uses a small boto3 script (`scripts/cognito_create_user.py`): the password is read with `getpass` and sent in one `AdminCreateUser` call.
+- Why we chose it: It's the shortest path to a real end-to-end run (Cognito sign-in, then the API, then Bedrock RAG) without deploying the app.
+  - **API on the host, not in a container:** the host process can use the developer's short-lived `aws login` credentials, and building the API image needs Docker Hub, which was unreachable locally.
+  - **`-sharedDb`:** DynamoDB Local otherwise keeps a separate database per access key. The make targets create the table with dummy keys, and the API's real session keys rotate, so without it the API would never see the table.
+  - **boto3 for user creation:** the AWS CLI can't take the password on stdin (see Incidents, "make auth-create-user failed"). boto3 with `getpass` keeps the password out of argv, files and the terminal, behaves the same in zsh and sh, and rejects an empty password before any AWS call.
+- Rejected alternative: Running the API container with the developer's credentials mounted or passed in (needs Docker Hub, and leaks long-lived credential handling into compose). Passing the temporary password as `--temporary-password` (visible in `ps`). A FIFO for `--cli-input-json` (the CLI reads the source twice: the second open blocks forever).
+- Tradeoff we accept:
+  - **The local API runs with the developer's full AWS permissions,** not a least-privilege runtime role (listed under Known open issues).
+  - **`-sharedDb` means every credential sees one local database.** That's correct for local dev; CI's service container is separate.
+  - **`make auth-create-user` now needs the API's virtualenv** (`uv`).
+- Revisit if: The app is deployed to AWS (the runtime then uses a task role, and this runbook becomes dev-only).
+
 ## Eval harness
 
 - Status: Planned (phase 5)
@@ -825,6 +844,63 @@ build; don't let it drift from the code.
 - Fix: A fixed random prefix, `seller-copilot-cbsn9z`, kept as the `HOSTED_DOMAIN_PREFIX` constant and generated with Python's `secrets` module. Jest asserts the template's `Domain` is that literal string, with no `AWS::AccountId` token and no 12-digit run, and that it follows Cognito's prefix rules. Negative test: putting `Aws.ACCOUNT_ID` back fails 2 tests.
 - Lesson: Anything that becomes a public URL or name (domains, bucket names, hosted-UI prefixes, URLs in emails) gets reviewed for identifiers before it ships. Use a random suffix for uniqueness, not an account or user identifier.
 
+### 2026-10-29: `auth-diff.txt` attached before `cdk diff` finished (recurrence)
+
+- Symptom: Before the AuthStack deploy, the `cdk diff` output file (`auth-diff.txt`) was attached while the command was still running, so the evidence was incomplete.
+- Root cause: The same evidence-capture habit as "Evidence-capture gaps during the hierarchical-chunking deploy": output was captured before the command returned and its exit code was seen. The earlier lesson wasn't applied.
+- Evidence: The account owner's record that the file was attached before `cdk diff` completed.
+- Fix: Re-run to completion before relying on it.
+- Lesson (repeated because it recurred): Wait for the prompt and the exit code, then capture. A recurrence means the lesson needs to be part of the step, not just recorded here.
+
+### 2026-10-29: Requested outputs not pasted before the AuthStack deploy
+
+- Symptom: The outputs of `make deploy-policy-update` and `git log` were requested but not pasted before `cdk deploy AuthStack` was run.
+- Root cause: The next step was taken before the previous step's evidence was shared.
+- Evidence: Those outputs are absent from the review record. The AuthStack deploy succeeding is **indirect** proof that the execution-policy update applied: creating the stack needs the new `cognito-idp` actions, which the old policy didn't grant. It doesn't show which policy version is the default.
+- Fix: Accepted on the indirect evidence. Future infra steps paste each requested output first.
+- Lesson: Paste every requested output before the next step. Indirect evidence is weaker and should be called out as such.
+
+### 2026-10-29: `make auth-create-user` failed: "Invalid JSON received"
+
+- Symptom: Against the real AWS CLI, `make auth-create-user` failed with `Error parsing parameter 'cli-input-json': Invalid JSON received` (exit 252). No user was created.
+- Root cause: The target piped the request JSON to `aws cognito-idp admin-create-user --cli-input-json file:///dev/stdin`. aws-cli v2 (2.39.1 here) reads `--cli-input-json` sources more than once: its debug log shows the arguments being processed twice. The first read consumes stdin, and the second sees nothing, so the JSON looks empty. The JSON escaping was fine; it had only been tested offline (a JSON round-trip in Python), never through the command the target actually runs.
+- Evidence: Reproduced with the real CLI against a dead local endpoint (`--endpoint-url http://127.0.0.1:9`, dummy credentials, no AWS call). The results:
+  - **Piped to `file:///dev/stdin`:** "Invalid JSON received".
+  - **A regular file redirected to `file:///dev/stdin`:** "Invalid JSON received".
+  - **Piped to `file:///dev/fd/0`:** "Invalid JSON received".
+  - **The same JSON as `file:///path/to/file`:** parses, then fails only on the connection.
+  - **A FIFO:** the second open blocked forever. The test had to be killed, and its empty temp directory was removed by exact path.
+
+  `--debug` logs "Arguments entered to CLI" twice for one invocation.
+- Fix: `make auth-create-user` now runs `scripts/cognito_create_user.py` (boto3 in the API venv). The password is read with `getpass` (shell-agnostic), validated before any AWS call (non-empty, Cognito's `^[\S]+.*[\S]+$` pattern, 12+ characters, typed twice), and sent in one `AdminCreateUser` call with `MessageAction=SUPPRESS`. It never appears in argv, a file or the terminal.
+  - **Unit tests:** botocore Stubber tests check the exact request and that rejection happens before any AWS client is created.
+  - **Exact-command test:** the real `make auth-create-user` ran with a stub `aws` first on PATH. An empty password exited with "No AWS call was made". A valid password reached the dead endpoint on `DescribeStacks`. The stub was never invoked.
+- Lesson: Test the command the target actually runs, against the real tool, before shipping. An offline check of one ingredient (here, the JSON escaping) isn't a test of the pipeline.
+
+### 2026-10-29: Bash `read -s -p` given for a zsh terminal; user left in FORCE_CHANGE_PASSWORD
+
+- Symptom: To set the seller user's permanent password, the reviewer gave a bash command using `read -s -p "prompt" PW`. In zsh, `read -p` means "read from the coprocess", so `PW` stayed empty. `AdminSetUserPassword` then rejected it: `InvalidParameterException` (pattern `^[\S]+.*[\S]+$`). The user had already been created and stayed in `FORCE_CHANGE_PASSWORD` until fixed.
+- Root cause: Shell-specific syntax for the wrong shell: macOS's default interactive shell is zsh, not bash. Nothing checked for an empty secret before the AWS call.
+- Evidence: The account owner's record of the `InvalidParameterException` and the user's `FORCE_CHANGE_PASSWORD` status.
+- Fix: Re-run with zsh syntax `read -s "PW?prompt"`, plus a length check before the call. The new `scripts/cognito_create_user.py` uses Python `getpass` and rejects empty or whitespace-padded passwords before any AWS call, so it no longer depends on the shell.
+- Lesson: Give shell-specific commands for the user's actual shell (and remember `make` recipes run in `/bin/sh`). Guard every secret against being empty before using it.
+
+### 2026-10-29: Local-run prompt and incident notes sent as separate pieces
+
+- Symptom: The reviewer provided the local-run prompt and the incident notes as separate pieces, without saying that all of them needed pasting. The account owner reasonably didn't send them all.
+- Root cause: Instructions for one step were split across messages, with no single complete prompt.
+- Evidence: The account owner's record. The pieces arrived separately and were consolidated afterwards.
+- Fix: Consolidated into a single prompt for this step.
+- Lesson: One consolidated prompt per step.
+
+### 2026-10-29: `make -n dev-live` partly executed the recipe (near-miss)
+
+- Symptom: While checking the new `dev-live` target with `make -n`, the recipe's first command actually ran. It stopped at its own guard ("Missing services/api/.env") because the env files didn't exist yet. Had they existed, the "dry run" would have started Docker services and the API.
+- Root cause: GNU make executes any recipe line that references `$(MAKE)`, even under `-n`, so recursive make works in dry runs. The first version of `dev-live` was one long recipe line that called `$(MAKE) migrate dynamodb-init`.
+- Evidence: `make -n dev-live` printed `Missing services/api/.env: run 'make live-env' first.` and `make: *** [dev-live] Error 1`, which only happens if the line runs. No containers were started.
+- Fix: `dev-live` is now a chain of ordinary prerequisite targets (`dev-live-check`, `dev-live-db`, `migrate`, `dynamodb-init`, `dev-live-seed`), with no `$(MAKE)` in any recipe. `make -n dev-live` now only prints (exit 0, no running services afterwards).
+- Lesson: `make -n` isn't always a dry run. Avoid `$(MAKE)` in recipes that have side effects, and confirm a dry run had no effects before trusting it.
+
 ## Known open issues
 
 Not yet fixed. Each needs a decision or a change in its own reviewed phase.
@@ -836,6 +912,9 @@ Not yet fixed. Each needs a decision or a change in its own reviewed phase.
 - **PR #3's description is wrong:** it still says "16/16 pass, 11 of them new"; the actual split was 10 new and 6 existing. PR #3 is merged; the correction of record is in Incidents, "PR #3's description misstates the Jest split".
 - **Nobody can log in yet:** the Cognito User Pool isn't deployed. The web app's sign-in (`oidc-client-ts`) and the API's JWT verification are implemented and tested against minted tokens, but no real user pool exists. The chat page, like every authenticated page, can't be used end to end until Cognito is provisioned and `COGNITO_*` / `NEXT_PUBLIC_*` are configured.
 - **Concurrent identical retries can call the model twice:** if two requests with the same `client_message_id` both arrive before an answer is recorded, both run retrieval and generation. Only the first answer is stored, and both callers get it back. That costs one extra model call in a rare race. Accepted; see "Idempotent message send" (PR #9).
+- **The app isn't deployed to AWS.** The end-to-end run is a local web app and local API, using AWS-managed Cognito (`AuthStack`) and the AWS-managed Bedrock Knowledge Base (`KnowledgeBaseStack`). There's no hosted frontend (S3 + CloudFront) or hosted API (ECS) yet.
+- **The local API runs with the developer's own AWS credentials** (`aws login`), so a least-privilege runtime role (an ECS task role with only `bedrock:Retrieve` on the KB and `bedrock:InvokeModel` on the answer model) isn't exercised or tested yet.
+- **Secrets Manager isn't used.** No application secret exists in this setup: the web client is public, Cognito and Bedrock ids are config, and Postgres and DynamoDB are local with local-only credentials. A deployed database password would need it.
 
 ## Resolved issues
 
