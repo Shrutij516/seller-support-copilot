@@ -22,6 +22,13 @@ def test_system_prompt_restricts_answers_to_context() -> None:
     assert "[1]" in SYSTEM_PROMPT  # tells the model the citation format
 
 
+def test_system_prompt_forbids_related_info_and_citations_when_context_does_not_answer() -> None:
+    assert (
+        "If the context does not answer the question that was asked, say so briefly. "
+        "Do not offer related information instead, and do not cite anything."
+    ) in SYSTEM_PROMPT
+
+
 def test_user_message_numbers_context_from_one_in_order() -> None:
     message = build_user_message("How fast are refunds?", CHUNKS)
 

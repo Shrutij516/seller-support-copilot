@@ -227,7 +227,6 @@ async def evaluate(
     )
     results: list[AnswerResult] = []
     for q in questions:
-        before = (generator.input_tokens, generator.output_tokens)
         try:
             answer = await answer_question(q.question, retriever, generator, min_score)
         except RagBackendError as exc:
@@ -261,8 +260,8 @@ async def evaluate(
                 kept_sources=[c.source for c in answer.kept],
                 passed=passed,
                 reasons=reasons,
-                input_tokens=generator.input_tokens - before[0],
-                output_tokens=generator.output_tokens - before[1],
+                input_tokens=answer.input_tokens,
+                output_tokens=answer.output_tokens,
                 timings_ms=answer.timings_ms,
             )
         )

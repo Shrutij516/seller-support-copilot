@@ -27,6 +27,9 @@ class RagAnswer:
     retrieved: list[RetrievedChunk]
     kept: list[RetrievedChunk]
     timings_ms: dict[str, float] = field(default_factory=dict)
+    # This call's Converse usage (0 when refused without a model call).
+    input_tokens: int = 0
+    output_tokens: int = 0
 
 
 def _elapsed_ms(start: float) -> float:
@@ -50,9 +53,16 @@ async def answer_question(
         return RagAnswer(REFUSAL_MESSAGE, (), True, retrieved, kept, timings)
 
     start = time.perf_counter()
-    text = await generator.generate(SYSTEM_PROMPT, build_user_message(question, kept))
+    generation = await generator.generate(SYSTEM_PROMPT, build_user_message(question, kept))
     timings["generate"] = _elapsed_ms(start)
 
     return RagAnswer(
-        text, filter_cited(text, make_citations(kept)), False, retrieved, kept, timings
+        text=generation.text,
+        citations=filter_cited(generation.text, make_citations(kept)),
+        refused=False,
+        retrieved=retrieved,
+        kept=kept,
+        timings_ms=timings,
+        input_tokens=generation.input_tokens,
+        output_tokens=generation.output_tokens,
     )

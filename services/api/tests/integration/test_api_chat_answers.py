@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from copilot_api.config import Settings, get_settings
 from copilot_api.main import app as fastapi_app
 from copilot_api.rag.prompt import REFUSAL_MESSAGE, SYSTEM_PROMPT
-from copilot_api.rag.types import RagBackendError, RetrievedChunk
+from copilot_api.rag.types import Generation, RagBackendError, RetrievedChunk
 from copilot_api.routers.chat import get_generator, get_retriever
 from tests.integration.conftest import TEST_CLIENT_ID, TEST_ISSUER, mint_token
 from tests.integration.factories import create_seller
@@ -45,11 +45,11 @@ class FakeGenerator:
     error: RagBackendError | None = None
     calls: list[tuple[str, str]] = field(default_factory=list)
 
-    async def generate(self, system_prompt: str, user_message: str) -> str:
+    async def generate(self, system_prompt: str, user_message: str) -> Generation:
         self.calls.append((system_prompt, user_message))
         if self.error is not None:
             raise self.error
-        return self.answer
+        return Generation(self.answer)
 
 
 @pytest.fixture

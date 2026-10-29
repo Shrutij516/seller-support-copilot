@@ -1,0 +1,1135 @@
+{
+  "run_at": "2026-10-29T05:13:54.168479+00:00",
+  "knowledge_base_id": "LP3DBFHA5R",
+  "region": "us-east-1",
+  "top_k": 5,
+  "golden_file": "retrieval_golden.jsonl",
+  "summary": {
+    "hit_at_1": 0.95,
+    "hit_at_5": 1.0,
+    "hits_by_slice": {
+      "direct": {
+        "n": 12,
+        "hit_at_1": 11,
+        "hit_at_5": 12
+      },
+      "paraphrase": {
+        "n": 8,
+        "hit_at_1": 8,
+        "hit_at_5": 8
+      }
+    },
+    "top_score_in_scope": {
+      "n": 20,
+      "min": 0.5838838517665863,
+      "median": 0.6781156361103058,
+      "max": 0.8251791894435883
+    },
+    "top_score_out_of_scope": {
+      "n": 10,
+      "min": 0.510599285364151,
+      "median": 0.620295986533165,
+      "max": 0.7552789151668549
+    },
+    "no_chunks": [],
+    "threshold": {
+      "threshold": 0.6139944791793823,
+      "keep_target": 0.95,
+      "in_scope_kept": 19,
+      "in_scope_total": 20,
+      "out_of_scope_refused": 4,
+      "out_of_scope_total": 10,
+      "out_of_scope_at_or_above": [
+        0.6159170866012573,
+        0.6246748864650726,
+        0.6272339224815369,
+        0.6297520399093628,
+        0.714958667755127,
+        0.7552789151668549
+      ]
+    },
+    "chunks": {
+      "per_source": {
+        "account-health.md": {
+          "distinct_chunks": 1,
+          "max_approx_tokens": 662
+        },
+        "disputes.md": {
+          "distinct_chunks": 3,
+          "max_approx_tokens": 297
+        },
+        "fees.md": {
+          "distinct_chunks": 1,
+          "max_approx_tokens": 608
+        },
+        "listing-rules-and-prohibited-items.md": {
+          "distinct_chunks": 3,
+          "max_approx_tokens": 310
+        },
+        "returns-and-refunds.md": {
+          "distinct_chunks": 3,
+          "max_approx_tokens": 295
+        },
+        "shipping-and-delivery-slas.md": {
+          "distinct_chunks": 1,
+          "max_approx_tokens": 718
+        }
+      },
+      "max_chunk_approx_tokens": 718,
+      "max_chunk_source": "shipping-and-delivery-slas.md",
+      "token_estimate": "whitespace words x 1.33 (approximate)"
+    }
+  },
+  "results": [
+    {
+      "id": "in-01",
+      "question": "How many days does a buyer have to request a refund?",
+      "in_scope": true,
+      "slice": "direct",
+      "expected_source": "returns-and-refunds.md",
+      "top_score": 0.7091720700263977,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "chunks": [
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.7091720700263977,
+          "approx_tokens": 215,
+          "text_sha1": "6405bd92c785516e8cdf8cc20b8c15ad307d6348"
+        },
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.690910279750824,
+          "approx_tokens": 295,
+          "text_sha1": "4b0d5534936ff3fb8be5d7e86f39543daab33ca5"
+        },
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.657127857208252,
+          "approx_tokens": 294,
+          "text_sha1": "77e95eca32bec836cc30da1bc864c3020bc327cd"
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.6477526128292084,
+          "approx_tokens": 282,
+          "text_sha1": "25dacdf4938ee3c63f3928697a6eb08e4312ff81"
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.6287640333175659,
+          "approx_tokens": 297,
+          "text_sha1": "ecffb37adfbc9b36dd9daa9e1c22f80c1c53de87"
+        }
+      ]
+    },
+    {
+      "id": "in-02",
+      "question": "A customer's package is still in transit. Can they open a refund request yet?",
+      "in_scope": true,
+      "slice": "paraphrase",
+      "expected_source": "returns-and-refunds.md",
+      "top_score": 0.668001115322113,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "chunks": [
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.668001115322113,
+          "approx_tokens": 215,
+          "text_sha1": "6405bd92c785516e8cdf8cc20b8c15ad307d6348"
+        },
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.6536615788936615,
+          "approx_tokens": 295,
+          "text_sha1": "4b0d5534936ff3fb8be5d7e86f39543daab33ca5"
+        },
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.6437352299690247,
+          "approx_tokens": 294,
+          "text_sha1": "77e95eca32bec836cc30da1bc864c3020bc327cd"
+        },
+        {
+          "source": "shipping-and-delivery-slas.md",
+          "score": 0.6414706110954285,
+          "approx_tokens": 718,
+          "text_sha1": "68d04adbe9f6c40552bcb75486d4b6d0f95fbd82"
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.6333965957164764,
+          "approx_tokens": 297,
+          "text_sha1": "ecffb37adfbc9b36dd9daa9e1c22f80c1c53de87"
+        }
+      ]
+    },
+    {
+      "id": "in-03",
+      "question": "How long do I have to respond to a refund request before it escalates?",
+      "in_scope": true,
+      "slice": "direct",
+      "expected_source": "returns-and-refunds.md",
+      "top_score": 0.7228021025657654,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "chunks": [
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.7228021025657654,
+          "approx_tokens": 215,
+          "text_sha1": "6405bd92c785516e8cdf8cc20b8c15ad307d6348"
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.6324835419654846,
+          "approx_tokens": 282,
+          "text_sha1": "25dacdf4938ee3c63f3928697a6eb08e4312ff81"
+        },
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.6280936598777771,
+          "approx_tokens": 295,
+          "text_sha1": "4b0d5534936ff3fb8be5d7e86f39543daab33ca5"
+        },
+        {
+          "source": "account-health.md",
+          "score": 0.6254460215568542,
+          "approx_tokens": 662,
+          "text_sha1": "148afbb7507c89a305043996028a3546deffd51a"
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.6211394667625427,
+          "approx_tokens": 297,
+          "text_sha1": "ecffb37adfbc9b36dd9daa9e1c22f80c1c53de87"
+        }
+      ]
+    },
+    {
+      "id": "in-04",
+      "question": "Can I make the buyer pay return postage for an item that showed up broken?",
+      "in_scope": true,
+      "slice": "paraphrase",
+      "expected_source": "returns-and-refunds.md",
+      "top_score": 0.6606101095676422,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "chunks": [
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.6606101095676422,
+          "approx_tokens": 295,
+          "text_sha1": "4b0d5534936ff3fb8be5d7e86f39543daab33ca5"
+        },
+        {
+          "source": "shipping-and-delivery-slas.md",
+          "score": 0.6313185691833496,
+          "approx_tokens": 718,
+          "text_sha1": "68d04adbe9f6c40552bcb75486d4b6d0f95fbd82"
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.6079645752906799,
+          "approx_tokens": 282,
+          "text_sha1": "25dacdf4938ee3c63f3928697a6eb08e4312ff81"
+        },
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.6074331998825073,
+          "approx_tokens": 294,
+          "text_sha1": "77e95eca32bec836cc30da1bc864c3020bc327cd"
+        }
+      ]
+    },
+    {
+      "id": "in-05",
+      "question": "Can a buyer have two refund requests open on the same order?",
+      "in_scope": true,
+      "slice": "direct",
+      "expected_source": "returns-and-refunds.md",
+      "top_score": 0.7287805378437042,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "chunks": [
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.7287805378437042,
+          "approx_tokens": 215,
+          "text_sha1": "6405bd92c785516e8cdf8cc20b8c15ad307d6348"
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.651459813117981,
+          "approx_tokens": 297,
+          "text_sha1": "ecffb37adfbc9b36dd9daa9e1c22f80c1c53de87"
+        },
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.6468429863452911,
+          "approx_tokens": 294,
+          "text_sha1": "77e95eca32bec836cc30da1bc864c3020bc327cd"
+        },
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.634802907705307,
+          "approx_tokens": 295,
+          "text_sha1": "4b0d5534936ff3fb8be5d7e86f39543daab33ca5"
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.6205320358276367,
+          "approx_tokens": 160,
+          "text_sha1": "be932ef70b049cd4730479679840650f0e44a4c7"
+        }
+      ]
+    },
+    {
+      "id": "in-06",
+      "question": "What is the referral fee for electronics?",
+      "in_scope": true,
+      "slice": "direct",
+      "expected_source": "fees.md",
+      "top_score": 0.8251791894435883,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "chunks": [
+        {
+          "source": "fees.md",
+          "score": 0.8251791894435883,
+          "approx_tokens": 608,
+          "text_sha1": "e038d0d98af3d4d526cf5079f5fa97b922a13ce6"
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.5515464842319489,
+          "approx_tokens": 282,
+          "text_sha1": "25dacdf4938ee3c63f3928697a6eb08e4312ff81"
+        }
+      ]
+    },
+    {
+      "id": "in-07",
+      "question": "Is the Pro plan worth it if I sell about 100 items a month?",
+      "in_scope": true,
+      "slice": "paraphrase",
+      "expected_source": "fees.md",
+      "top_score": 0.621320366859436,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "chunks": [
+        {
+          "source": "fees.md",
+          "score": 0.621320366859436,
+          "approx_tokens": 608,
+          "text_sha1": "e038d0d98af3d4d526cf5079f5fa97b922a13ce6"
+        },
+        {
+          "source": "account-health.md",
+          "score": 0.5961344540119171,
+          "approx_tokens": 662,
+          "text_sha1": "148afbb7507c89a305043996028a3546deffd51a"
+        },
+        {
+          "source": "listing-rules-and-prohibited-items.md",
+          "score": 0.5846934616565704,
+          "approx_tokens": 201,
+          "text_sha1": "dc36a655bfb28617fad5bc1104207580c06c21fb"
+        }
+      ]
+    },
+    {
+      "id": "in-08",
+      "question": "How much does warehouse storage cost in November?",
+      "in_scope": true,
+      "slice": "direct",
+      "expected_source": "fees.md",
+      "top_score": 0.6142087280750275,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "chunks": [
+        {
+          "source": "fees.md",
+          "score": 0.6142087280750275,
+          "approx_tokens": 608,
+          "text_sha1": "e038d0d98af3d4d526cf5079f5fa97b922a13ce6"
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.5426559448242188,
+          "approx_tokens": 282,
+          "text_sha1": "25dacdf4938ee3c63f3928697a6eb08e4312ff81"
+        },
+        {
+          "source": "shipping-and-delivery-slas.md",
+          "score": 0.5333468616008759,
+          "approx_tokens": 718,
+          "text_sha1": "68d04adbe9f6c40552bcb75486d4b6d0f95fbd82"
+        }
+      ]
+    },
+    {
+      "id": "in-09",
+      "question": "When an order gets refunded, do I get my commission back?",
+      "in_scope": true,
+      "slice": "paraphrase",
+      "expected_source": "fees.md",
+      "top_score": 0.6381855607032776,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "chunks": [
+        {
+          "source": "fees.md",
+          "score": 0.6381855607032776,
+          "approx_tokens": 608,
+          "text_sha1": "e038d0d98af3d4d526cf5079f5fa97b922a13ce6"
+        },
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.63646399974823,
+          "approx_tokens": 295,
+          "text_sha1": "4b0d5534936ff3fb8be5d7e86f39543daab33ca5"
+        },
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.6310823559761047,
+          "approx_tokens": 294,
+          "text_sha1": "77e95eca32bec836cc30da1bc864c3020bc327cd"
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.6278169751167297,
+          "approx_tokens": 282,
+          "text_sha1": "25dacdf4938ee3c63f3928697a6eb08e4312ff81"
+        },
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.6249569058418274,
+          "approx_tokens": 215,
+          "text_sha1": "6405bd92c785516e8cdf8cc20b8c15ad307d6348"
+        }
+      ]
+    },
+    {
+      "id": "in-10",
+      "question": "How often are payouts issued?",
+      "in_scope": true,
+      "slice": "direct",
+      "expected_source": "fees.md",
+      "top_score": 0.6555060148239136,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "chunks": [
+        {
+          "source": "fees.md",
+          "score": 0.6555060148239136,
+          "approx_tokens": 608,
+          "text_sha1": "e038d0d98af3d4d526cf5079f5fa97b922a13ce6"
+        },
+        {
+          "source": "shipping-and-delivery-slas.md",
+          "score": 0.570545881986618,
+          "approx_tokens": 718,
+          "text_sha1": "68d04adbe9f6c40552bcb75486d4b6d0f95fbd82"
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.555295467376709,
+          "approx_tokens": 282,
+          "text_sha1": "25dacdf4938ee3c63f3928697a6eb08e4312ff81"
+        },
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.5498517453670502,
+          "approx_tokens": 215,
+          "text_sha1": "6405bd92c785516e8cdf8cc20b8c15ad307d6348"
+        }
+      ]
+    },
+    {
+      "id": "in-11",
+      "question": "What is the delivery SLA for expedited shipping?",
+      "in_scope": true,
+      "slice": "direct",
+      "expected_source": "shipping-and-delivery-slas.md",
+      "top_score": 0.7223633527755737,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "chunks": [
+        {
+          "source": "shipping-and-delivery-slas.md",
+          "score": 0.7223633527755737,
+          "approx_tokens": 718,
+          "text_sha1": "68d04adbe9f6c40552bcb75486d4b6d0f95fbd82"
+        },
+        {
+          "source": "account-health.md",
+          "score": 0.603700578212738,
+          "approx_tokens": 662,
+          "text_sha1": "148afbb7507c89a305043996028a3546deffd51a"
+        }
+      ]
+    },
+    {
+      "id": "in-12",
+      "question": "After how long without a tracking update is a package treated as lost?",
+      "in_scope": true,
+      "slice": "paraphrase",
+      "expected_source": "shipping-and-delivery-slas.md",
+      "top_score": 0.7615141272544861,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "chunks": [
+        {
+          "source": "shipping-and-delivery-slas.md",
+          "score": 0.7615141272544861,
+          "approx_tokens": 718,
+          "text_sha1": "68d04adbe9f6c40552bcb75486d4b6d0f95fbd82"
+        },
+        {
+          "source": "listing-rules-and-prohibited-items.md",
+          "score": 0.5914264917373657,
+          "approx_tokens": 201,
+          "text_sha1": "dc36a655bfb28617fad5bc1104207580c06c21fb"
+        },
+        {
+          "source": "account-health.md",
+          "score": 0.5883610248565674,
+          "approx_tokens": 662,
+          "text_sha1": "148afbb7507c89a305043996028a3546deffd51a"
+        },
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.5875830352306366,
+          "approx_tokens": 295,
+          "text_sha1": "4b0d5534936ff3fb8be5d7e86f39543daab33ca5"
+        }
+      ]
+    },
+    {
+      "id": "in-13",
+      "question": "Do I need tracking on every shipment?",
+      "in_scope": true,
+      "slice": "direct",
+      "expected_source": "shipping-and-delivery-slas.md",
+      "top_score": 0.6882301568984985,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "chunks": [
+        {
+          "source": "shipping-and-delivery-slas.md",
+          "score": 0.6882301568984985,
+          "approx_tokens": 718,
+          "text_sha1": "68d04adbe9f6c40552bcb75486d4b6d0f95fbd82"
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.5521483421325684,
+          "approx_tokens": 160,
+          "text_sha1": "be932ef70b049cd4730479679840650f0e44a4c7"
+        }
+      ]
+    },
+    {
+      "id": "in-14",
+      "question": "I picked the 1-2 day handling tier but I keep shipping late. When does that become a problem?",
+      "in_scope": true,
+      "slice": "paraphrase",
+      "expected_source": "shipping-and-delivery-slas.md",
+      "top_score": 0.7085734009742737,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "chunks": [
+        {
+          "source": "shipping-and-delivery-slas.md",
+          "score": 0.7085734009742737,
+          "approx_tokens": 718,
+          "text_sha1": "68d04adbe9f6c40552bcb75486d4b6d0f95fbd82"
+        },
+        {
+          "source": "account-health.md",
+          "score": 0.6169768571853638,
+          "approx_tokens": 662,
+          "text_sha1": "148afbb7507c89a305043996028a3546deffd51a"
+        }
+      ]
+    },
+    {
+      "id": "in-15",
+      "question": "What order defect rate do I need to stay under?",
+      "in_scope": true,
+      "slice": "direct",
+      "expected_source": "account-health.md",
+      "top_score": 0.6139944791793823,
+      "hit_at_1": false,
+      "hit_at_5": true,
+      "chunks": [
+        {
+          "source": "shipping-and-delivery-slas.md",
+          "score": 0.6139944791793823,
+          "approx_tokens": 718,
+          "text_sha1": "68d04adbe9f6c40552bcb75486d4b6d0f95fbd82"
+        },
+        {
+          "source": "account-health.md",
+          "score": 0.5977810919284821,
+          "approx_tokens": 662,
+          "text_sha1": "148afbb7507c89a305043996028a3546deffd51a"
+        }
+      ]
+    },
+    {
+      "id": "in-16",
+      "question": "My health score dropped to 62. What happens now?",
+      "in_scope": true,
+      "slice": "paraphrase",
+      "expected_source": "account-health.md",
+      "top_score": 0.6647228002548218,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "chunks": [
+        {
+          "source": "account-health.md",
+          "score": 0.6647228002548218,
+          "approx_tokens": 662,
+          "text_sha1": "148afbb7507c89a305043996028a3546deffd51a"
+        },
+        {
+          "source": "shipping-and-delivery-slas.md",
+          "score": 0.5758377611637115,
+          "approx_tokens": 718,
+          "text_sha1": "68d04adbe9f6c40552bcb75486d4b6d0f95fbd82"
+        },
+        {
+          "source": "listing-rules-and-prohibited-items.md",
+          "score": 0.5471556186676025,
+          "approx_tokens": 201,
+          "text_sha1": "dc36a655bfb28617fad5bc1104207580c06c21fb"
+        }
+      ]
+    },
+    {
+      "id": "in-17",
+      "question": "How long do I have to appeal a suspension?",
+      "in_scope": true,
+      "slice": "direct",
+      "expected_source": "account-health.md",
+      "top_score": 0.6187303960323334,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "chunks": [
+        {
+          "source": "account-health.md",
+          "score": 0.6187303960323334,
+          "approx_tokens": 662,
+          "text_sha1": "148afbb7507c89a305043996028a3546deffd51a"
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.5503433048725128,
+          "approx_tokens": 282,
+          "text_sha1": "25dacdf4938ee3c63f3928697a6eb08e4312ff81"
+        },
+        {
+          "source": "listing-rules-and-prohibited-items.md",
+          "score": 0.5484658777713776,
+          "approx_tokens": 201,
+          "text_sha1": "dc36a655bfb28617fad5bc1104207580c06c21fb"
+        },
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.5482448041439056,
+          "approx_tokens": 215,
+          "text_sha1": "6405bd92c785516e8cdf8cc20b8c15ad307d6348"
+        },
+        {
+          "source": "shipping-and-delivery-slas.md",
+          "score": 0.5436242818832397,
+          "approx_tokens": 718,
+          "text_sha1": "68d04adbe9f6c40552bcb75486d4b6d0f95fbd82"
+        }
+      ]
+    },
+    {
+      "id": "in-18",
+      "question": "Can I sell alcohol on Kestrel Market?",
+      "in_scope": true,
+      "slice": "direct",
+      "expected_source": "listing-rules-and-prohibited-items.md",
+      "top_score": 0.7870979011058807,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "chunks": [
+        {
+          "source": "listing-rules-and-prohibited-items.md",
+          "score": 0.7870979011058807,
+          "approx_tokens": 282,
+          "text_sha1": "e41d43cbbcc0cdef1fcf1b8c7b36d15ebfe8b11f"
+        },
+        {
+          "source": "listing-rules-and-prohibited-items.md",
+          "score": 0.7670812606811523,
+          "approx_tokens": 310,
+          "text_sha1": "4fbde5e2b1cd2f8a7fbe7ddf589d73d2dcaf68b0"
+        },
+        {
+          "source": "fees.md",
+          "score": 0.7507384419441223,
+          "approx_tokens": 608,
+          "text_sha1": "e038d0d98af3d4d526cf5079f5fa97b922a13ce6"
+        },
+        {
+          "source": "listing-rules-and-prohibited-items.md",
+          "score": 0.731422483921051,
+          "approx_tokens": 201,
+          "text_sha1": "dc36a655bfb28617fad5bc1104207580c06c21fb"
+        }
+      ]
+    },
+    {
+      "id": "in-19",
+      "question": "Is it okay to use the manufacturer's product photos for a refurbished laptop?",
+      "in_scope": true,
+      "slice": "paraphrase",
+      "expected_source": "listing-rules-and-prohibited-items.md",
+      "top_score": 0.5838838517665863,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "chunks": [
+        {
+          "source": "listing-rules-and-prohibited-items.md",
+          "score": 0.5838838517665863,
+          "approx_tokens": 282,
+          "text_sha1": "e41d43cbbcc0cdef1fcf1b8c7b36d15ebfe8b11f"
+        },
+        {
+          "source": "listing-rules-and-prohibited-items.md",
+          "score": 0.5755484402179718,
+          "approx_tokens": 310,
+          "text_sha1": "4fbde5e2b1cd2f8a7fbe7ddf589d73d2dcaf68b0"
+        },
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.5709936916828156,
+          "approx_tokens": 295,
+          "text_sha1": "4b0d5534936ff3fb8be5d7e86f39543daab33ca5"
+        },
+        {
+          "source": "listing-rules-and-prohibited-items.md",
+          "score": 0.5682231485843658,
+          "approx_tokens": 201,
+          "text_sha1": "dc36a655bfb28617fad5bc1104207580c06c21fb"
+        },
+        {
+          "source": "shipping-and-delivery-slas.md",
+          "score": 0.5667469501495361,
+          "approx_tokens": 718,
+          "text_sha1": "68d04adbe9f6c40552bcb75486d4b6d0f95fbd82"
+        }
+      ]
+    },
+    {
+      "id": "in-20",
+      "question": "How long do I have to submit evidence for a chargeback, and what happens if I lose?",
+      "in_scope": true,
+      "slice": "direct",
+      "expected_source": "disputes.md",
+      "top_score": 0.7348386645317078,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "chunks": [
+        {
+          "source": "disputes.md",
+          "score": 0.7348386645317078,
+          "approx_tokens": 282,
+          "text_sha1": "25dacdf4938ee3c63f3928697a6eb08e4312ff81"
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.6323055922985077,
+          "approx_tokens": 297,
+          "text_sha1": "ecffb37adfbc9b36dd9daa9e1c22f80c1c53de87"
+        },
+        {
+          "source": "account-health.md",
+          "score": 0.5994453728199005,
+          "approx_tokens": 662,
+          "text_sha1": "148afbb7507c89a305043996028a3546deffd51a"
+        },
+        {
+          "source": "shipping-and-delivery-slas.md",
+          "score": 0.5848498642444611,
+          "approx_tokens": 718,
+          "text_sha1": "68d04adbe9f6c40552bcb75486d4b6d0f95fbd82"
+        }
+      ]
+    },
+    {
+      "id": "out-01",
+      "question": "What is the capital of France?",
+      "in_scope": false,
+      "slice": "general-knowledge",
+      "expected_source": null,
+      "top_score": 0.5233715176582336,
+      "hit_at_1": null,
+      "hit_at_5": null,
+      "chunks": [
+        {
+          "source": "disputes.md",
+          "score": 0.5233715176582336,
+          "approx_tokens": 160,
+          "text_sha1": "be932ef70b049cd4730479679840650f0e44a4c7"
+        },
+        {
+          "source": "account-health.md",
+          "score": 0.5230845510959625,
+          "approx_tokens": 662,
+          "text_sha1": "148afbb7507c89a305043996028a3546deffd51a"
+        },
+        {
+          "source": "fees.md",
+          "score": 0.5224803686141968,
+          "approx_tokens": 608,
+          "text_sha1": "e038d0d98af3d4d526cf5079f5fa97b922a13ce6"
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.52140012383461,
+          "approx_tokens": 297,
+          "text_sha1": "ecffb37adfbc9b36dd9daa9e1c22f80c1c53de87"
+        },
+        {
+          "source": "shipping-and-delivery-slas.md",
+          "score": 0.517912894487381,
+          "approx_tokens": 718,
+          "text_sha1": "68d04adbe9f6c40552bcb75486d4b6d0f95fbd82"
+        }
+      ]
+    },
+    {
+      "id": "out-02",
+      "question": "How do I bake sourdough bread?",
+      "in_scope": false,
+      "slice": "general-knowledge",
+      "expected_source": null,
+      "top_score": 0.510599285364151,
+      "hit_at_1": null,
+      "hit_at_5": null,
+      "chunks": [
+        {
+          "source": "shipping-and-delivery-slas.md",
+          "score": 0.510599285364151,
+          "approx_tokens": 718,
+          "text_sha1": "68d04adbe9f6c40552bcb75486d4b6d0f95fbd82"
+        },
+        {
+          "source": "listing-rules-and-prohibited-items.md",
+          "score": 0.5104236006736755,
+          "approx_tokens": 201,
+          "text_sha1": "dc36a655bfb28617fad5bc1104207580c06c21fb"
+        },
+        {
+          "source": "account-health.md",
+          "score": 0.5102834403514862,
+          "approx_tokens": 662,
+          "text_sha1": "148afbb7507c89a305043996028a3546deffd51a"
+        },
+        {
+          "source": "listing-rules-and-prohibited-items.md",
+          "score": 0.5078017115592957,
+          "approx_tokens": 282,
+          "text_sha1": "e41d43cbbcc0cdef1fcf1b8c7b36d15ebfe8b11f"
+        }
+      ]
+    },
+    {
+      "id": "out-03",
+      "question": "Who won the 2018 FIFA World Cup?",
+      "in_scope": false,
+      "slice": "general-knowledge",
+      "expected_source": null,
+      "top_score": 0.5309298932552338,
+      "hit_at_1": null,
+      "hit_at_5": null,
+      "chunks": [
+        {
+          "source": "listing-rules-and-prohibited-items.md",
+          "score": 0.5309298932552338,
+          "approx_tokens": 282,
+          "text_sha1": "e41d43cbbcc0cdef1fcf1b8c7b36d15ebfe8b11f"
+        },
+        {
+          "source": "shipping-and-delivery-slas.md",
+          "score": 0.5299221873283386,
+          "approx_tokens": 718,
+          "text_sha1": "68d04adbe9f6c40552bcb75486d4b6d0f95fbd82"
+        },
+        {
+          "source": "account-health.md",
+          "score": 0.5298350155353546,
+          "approx_tokens": 662,
+          "text_sha1": "148afbb7507c89a305043996028a3546deffd51a"
+        },
+        {
+          "source": "listing-rules-and-prohibited-items.md",
+          "score": 0.5248807668685913,
+          "approx_tokens": 310,
+          "text_sha1": "4fbde5e2b1cd2f8a7fbe7ddf589d73d2dcaf68b0"
+        }
+      ]
+    },
+    {
+      "id": "out-04",
+      "question": "What are Amazon FBA's fulfillment fees for a small standard item?",
+      "in_scope": false,
+      "slice": "other-platform",
+      "expected_source": null,
+      "top_score": 0.714958667755127,
+      "hit_at_1": null,
+      "hit_at_5": null,
+      "chunks": [
+        {
+          "source": "fees.md",
+          "score": 0.714958667755127,
+          "approx_tokens": 608,
+          "text_sha1": "e038d0d98af3d4d526cf5079f5fa97b922a13ce6"
+        },
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.5847663283348083,
+          "approx_tokens": 215,
+          "text_sha1": "6405bd92c785516e8cdf8cc20b8c15ad307d6348"
+        }
+      ]
+    },
+    {
+      "id": "out-05",
+      "question": "How do I renew a listing on Etsy?",
+      "in_scope": false,
+      "slice": "other-platform",
+      "expected_source": null,
+      "top_score": 0.6246748864650726,
+      "hit_at_1": null,
+      "hit_at_5": null,
+      "chunks": [
+        {
+          "source": "fees.md",
+          "score": 0.6246748864650726,
+          "approx_tokens": 608,
+          "text_sha1": "e038d0d98af3d4d526cf5079f5fa97b922a13ce6"
+        },
+        {
+          "source": "listing-rules-and-prohibited-items.md",
+          "score": 0.6234737634658813,
+          "approx_tokens": 201,
+          "text_sha1": "dc36a655bfb28617fad5bc1104207580c06c21fb"
+        },
+        {
+          "source": "listing-rules-and-prohibited-items.md",
+          "score": 0.6216241121292114,
+          "approx_tokens": 310,
+          "text_sha1": "4fbde5e2b1cd2f8a7fbe7ddf589d73d2dcaf68b0"
+        },
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.5936426818370819,
+          "approx_tokens": 295,
+          "text_sha1": "4b0d5534936ff3fb8be5d7e86f39543daab33ca5"
+        },
+        {
+          "source": "account-health.md",
+          "score": 0.5934424102306366,
+          "approx_tokens": 662,
+          "text_sha1": "148afbb7507c89a305043996028a3546deffd51a"
+        }
+      ]
+    },
+    {
+      "id": "out-06",
+      "question": "What is eBay's Top Rated Seller program?",
+      "in_scope": false,
+      "slice": "other-platform",
+      "expected_source": null,
+      "top_score": 0.6272339224815369,
+      "hit_at_1": null,
+      "hit_at_5": null,
+      "chunks": [
+        {
+          "source": "listing-rules-and-prohibited-items.md",
+          "score": 0.6272339224815369,
+          "approx_tokens": 201,
+          "text_sha1": "dc36a655bfb28617fad5bc1104207580c06c21fb"
+        },
+        {
+          "source": "shipping-and-delivery-slas.md",
+          "score": 0.6217877864837646,
+          "approx_tokens": 718,
+          "text_sha1": "68d04adbe9f6c40552bcb75486d4b6d0f95fbd82"
+        },
+        {
+          "source": "fees.md",
+          "score": 0.6179340183734894,
+          "approx_tokens": 608,
+          "text_sha1": "e038d0d98af3d4d526cf5079f5fa97b922a13ce6"
+        },
+        {
+          "source": "listing-rules-and-prohibited-items.md",
+          "score": 0.6112311780452728,
+          "approx_tokens": 310,
+          "text_sha1": "4fbde5e2b1cd2f8a7fbe7ddf589d73d2dcaf68b0"
+        },
+        {
+          "source": "account-health.md",
+          "score": 0.6106384694576263,
+          "approx_tokens": 662,
+          "text_sha1": "148afbb7507c89a305043996028a3546deffd51a"
+        }
+      ]
+    },
+    {
+      "id": "out-07",
+      "question": "purple monkey dishwasher refund velocity",
+      "in_scope": false,
+      "slice": "nonsense",
+      "expected_source": null,
+      "top_score": 0.6297520399093628,
+      "hit_at_1": null,
+      "hit_at_5": null,
+      "chunks": [
+        {
+          "source": "fees.md",
+          "score": 0.6297520399093628,
+          "approx_tokens": 608,
+          "text_sha1": "e038d0d98af3d4d526cf5079f5fa97b922a13ce6"
+        },
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.6250120997428894,
+          "approx_tokens": 294,
+          "text_sha1": "77e95eca32bec836cc30da1bc864c3020bc327cd"
+        },
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.6218599677085876,
+          "approx_tokens": 295,
+          "text_sha1": "4b0d5534936ff3fb8be5d7e86f39543daab33ca5"
+        },
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.6072331070899963,
+          "approx_tokens": 215,
+          "text_sha1": "6405bd92c785516e8cdf8cc20b8c15ad307d6348"
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.5992704927921295,
+          "approx_tokens": 282,
+          "text_sha1": "25dacdf4938ee3c63f3928697a6eb08e4312ff81"
+        }
+      ]
+    },
+    {
+      "id": "out-08",
+      "question": "asdf qwer zxcv",
+      "in_scope": false,
+      "slice": "nonsense",
+      "expected_source": null,
+      "top_score": 0.5451278686523438,
+      "hit_at_1": null,
+      "hit_at_5": null,
+      "chunks": [
+        {
+          "source": "fees.md",
+          "score": 0.5451278686523438,
+          "approx_tokens": 608,
+          "text_sha1": "e038d0d98af3d4d526cf5079f5fa97b922a13ce6"
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.5333058834075928,
+          "approx_tokens": 160,
+          "text_sha1": "be932ef70b049cd4730479679840650f0e44a4c7"
+        },
+        {
+          "source": "shipping-and-delivery-slas.md",
+          "score": 0.5329005718231201,
+          "approx_tokens": 718,
+          "text_sha1": "68d04adbe9f6c40552bcb75486d4b6d0f95fbd82"
+        }
+      ]
+    },
+    {
+      "id": "out-09",
+      "question": "How do I turn on two-factor authentication for my seller account?",
+      "in_scope": false,
+      "slice": "lookalike",
+      "expected_source": null,
+      "top_score": 0.6159170866012573,
+      "hit_at_1": null,
+      "hit_at_5": null,
+      "chunks": [
+        {
+          "source": "account-health.md",
+          "score": 0.6159170866012573,
+          "approx_tokens": 662,
+          "text_sha1": "148afbb7507c89a305043996028a3546deffd51a"
+        },
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.6060792505741119,
+          "approx_tokens": 215,
+          "text_sha1": "6405bd92c785516e8cdf8cc20b8c15ad307d6348"
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.6027980446815491,
+          "approx_tokens": 282,
+          "text_sha1": "25dacdf4938ee3c63f3928697a6eb08e4312ff81"
+        },
+        {
+          "source": "listing-rules-and-prohibited-items.md",
+          "score": 0.6019237637519836,
+          "approx_tokens": 201,
+          "text_sha1": "dc36a655bfb28617fad5bc1104207580c06c21fb"
+        },
+        {
+          "source": "shipping-and-delivery-slas.md",
+          "score": 0.5942238867282867,
+          "approx_tokens": 718,
+          "text_sha1": "68d04adbe9f6c40552bcb75486d4b6d0f95fbd82"
+        }
+      ]
+    },
+    {
+      "id": "out-10",
+      "question": "Does Kestrel Market collect sales tax on my behalf in every state?",
+      "in_scope": false,
+      "slice": "lookalike",
+      "expected_source": null,
+      "top_score": 0.7552789151668549,
+      "hit_at_1": null,
+      "hit_at_5": null,
+      "chunks": [
+        {
+          "source": "fees.md",
+          "score": 0.7552789151668549,
+          "approx_tokens": 608,
+          "text_sha1": "e038d0d98af3d4d526cf5079f5fa97b922a13ce6"
+        },
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.7244311273097992,
+          "approx_tokens": 294,
+          "text_sha1": "77e95eca32bec836cc30da1bc864c3020bc327cd"
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.7175071239471436,
+          "approx_tokens": 160,
+          "text_sha1": "be932ef70b049cd4730479679840650f0e44a4c7"
+        }
+      ]
+    }
+  ]
+}

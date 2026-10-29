@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 
 from copilot_api.rag.pipeline import answer_question
 from copilot_api.rag.prompt import REFUSAL_MESSAGE, SYSTEM_PROMPT
-from copilot_api.rag.types import RetrievedChunk
+from copilot_api.rag.types import Generation, RetrievedChunk
 
 CHUNKS = [
     RetrievedChunk(text="Fees are charged at sale.", source="fees.md", score=0.9),
@@ -25,9 +25,9 @@ class FakeGenerator:
     answer: str
     calls: list[tuple[str, str]] = field(default_factory=list)
 
-    async def generate(self, system_prompt: str, user_message: str) -> str:
+    async def generate(self, system_prompt: str, user_message: str) -> Generation:
         self.calls.append((system_prompt, user_message))
-        return self.answer
+        return Generation(self.answer, input_tokens=120, output_tokens=15)
 
 
 async def test_returns_only_cited_sources_with_prompt_numbering() -> None:
@@ -43,6 +43,7 @@ async def test_returns_only_cited_sources_with_prompt_numbering() -> None:
     assert "[2] (source: returns.md)" in user_message
     assert "Barely related." not in user_message
     assert set(answer.timings_ms) == {"retrieve", "generate"}
+    assert (answer.input_tokens, answer.output_tokens) == (120, 15)
 
 
 async def test_model_refusal_without_markers_has_no_citations() -> None:
@@ -62,3 +63,4 @@ async def test_nothing_above_floor_refuses_without_calling_model() -> None:
     assert (answer.refused, answer.text, answer.citations) == (True, REFUSAL_MESSAGE, ())
     assert generator.calls == []
     assert set(answer.timings_ms) == {"retrieve"}
+    assert (answer.input_tokens, answer.output_tokens) == (0, 0)

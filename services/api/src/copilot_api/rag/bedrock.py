@@ -14,7 +14,7 @@ from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
 from copilot_api.config import Settings
-from copilot_api.rag.types import RagBackendError, RetrievedChunk
+from copilot_api.rag.types import Generation, RagBackendError, RetrievedChunk
 
 if TYPE_CHECKING:
     from mypy_boto3_bedrock_agent_runtime import AgentsforBedrockRuntimeClient
@@ -98,12 +98,8 @@ class BedrockConverseGenerator:
         self._client = client
         self._model_id = model_id
         self._max_tokens = max_tokens
-        # Running totals from Converse's `usage` field, for eval cost reporting. Not
-        # per-request state; nothing in the request path reads them.
-        self.input_tokens = 0
-        self.output_tokens = 0
 
-    async def generate(self, system_prompt: str, user_message: str) -> str:
+    async def generate(self, system_prompt: str, user_message: str) -> Generation:
         def _call() -> Any:
             return self._client.converse(
                 modelId=self._model_id,
@@ -117,12 +113,13 @@ class BedrockConverseGenerator:
         except (ClientError, BotoCoreError) as exc:
             raise RagBackendError("converse", _reason(exc)) from exc
 
-        usage = response.get("usage", {})
-        self.input_tokens += int(usage.get("inputTokens", 0))
-        self.output_tokens += int(usage.get("outputTokens", 0))
-
         blocks = response.get("output", {}).get("message", {}).get("content", [])
         text = "".join(block["text"] for block in blocks if "text" in block).strip()
         if not text:
             raise RagBackendError("converse", "empty response")
-        return text
+        usage = response.get("usage", {})
+        return Generation(
+            text=text,
+            input_tokens=int(usage.get("inputTokens", 0)),
+            output_tokens=int(usage.get("outputTokens", 0)),
+        )

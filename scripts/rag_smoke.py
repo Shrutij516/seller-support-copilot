@@ -53,7 +53,7 @@ async def run(args: argparse.Namespace) -> None:
         print(f"\n[refusal, model not called]\n{answer.text}")
         return
     print(f"[converse] {answer.timings_ms['generate']:.0f} ms")
-    print(f"tokens:    input {generator.input_tokens}, output {generator.output_tokens}")
+    print(f"tokens:    input {answer.input_tokens}, output {answer.output_tokens}")
 
     print(f"\nanswer:\n{answer.text}\n")
     print(f"citations (only those marked in the answer): {len(answer.citations)}")
