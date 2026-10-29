@@ -94,6 +94,9 @@ build; don't let it drift from the code.
 - Why we chose it: Managed auth with native AWS integration; I don't build or store passwords myself.
 - Rejected alternative: Custom auth (JWT plus a users table). More code to secure and maintain for something Cognito already does.
 - Tradeoff we accept: Less UI and token customization than rolling it myself; some config lives outside app code.
+- Hosted-UI domain prefix: `seller-copilot-cbsn9z`, a fixed random suffix kept as `HOSTED_DOMAIN_PREFIX` in `infra/lib/auth-stack.ts`. It was generated once with a CSPRNG (`python3 -c "import secrets, string; print(''.join(secrets.choice(string.ascii_lowercase + string.digits) for _ in range(6)))"`). It follows Cognito's prefix rules: the `CreateUserPoolDomain` pattern `^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$` (https://docs.aws.amazon.com/cognito-user-identity-pools/latest/APIReference/API_CreateUserPoolDomain.html) and no `aws`, `amazon` or `cognito` (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pools-assign-domain.html, "Reserved terms"). Jest asserts the template uses the literal constant, that it contains no `AWS::AccountId` token or 12-digit run, and that it follows the rules.
+  - Rejected: an account-ID suffix (`seller-copilot-${AWS::AccountId}`). It's unique for free, but the prefix is part of every public login URL (`<prefix>.auth.us-east-1.amazoncognito.com`), so it would publish the AWS account number to anyone who sees a sign-in link.
+  - Tradeoff: prefixes must be unique in the Region across all AWS customers. If someone already holds this one, the deploy fails, and a new suffix has to be generated the same way and committed.
 - Revisit if: Auth needs (SSO, custom MFA) outgrow what Cognito supports cleanly.
 
 ## JWT verification in the API (not an API Gateway authorizer)
@@ -365,7 +368,7 @@ build; don't let it drift from the code.
 
 ## Cognito feature plan: Lite with the classic hosted UI
 
-- Status: Defined in CDK (6a). `featurePlan: FeaturePlan.LITE` (`UserPoolTier: LITE`), and the domain uses `managedLoginVersion: CLASSIC_HOSTED_UI` (`ManagedLoginVersion: 1`) on a Cognito prefix domain `seller-copilot-<account id>`.
+- Status: Defined in CDK (6a). `featurePlan: FeaturePlan.LITE` (`UserPoolTier: LITE`), and the domain uses `managedLoginVersion: CLASSIC_HOSTED_UI` (`ManagedLoginVersion: 1`) on a Cognito prefix domain `seller-copilot-cbsn9z` (see "Cognito" for why it's a fixed random suffix).
 - What it does: Uses the cheapest user pool feature plan, with the classic hosted UI for sign-in and sign-out pages.
 - Why we chose it: Lite includes everything this app uses: user groups, the OAuth 2.0/OIDC authorization server (code grant), password sign-in, TOTP MFA and hosted login pages. "The classic hosted UI is available in all feature tiers", while "managed login is available in the Essentials and Plus tiers" (https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-sign-in-feature-plans.html). New pools **default to Essentials** unless the plan is set, so Lite is set explicitly. Managed login on a programmatically created app client also needs a separate `ManagedLoginBranding` resource before its pages render ("Managed login isn't available for an app client created with an AWS SDK until you create one": https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pools-managed-login.html). That's one more resource and more execution-policy surface for a nicer login page we don't need. Pricing (https://aws.amazon.com/cognito/pricing/, as summarized on 2026-10-29): Lite and Essentials both include **10,000 MAUs per month free**, and the page says this "does not automatically expire" after the 12-month free tier. Above that, Lite was listed at about $0.0055 per MAU, Essentials $0.015 and Plus $0.020, and Plus has no free tier. At demo scale (a handful of users), Lite and Essentials are both $0. Lite is cheapest if it ever grows, and it carries no features we'd have to remember to keep off.
 - Rejected alternative: Essentials with managed login. Nicer pages, passkeys, email MFA and access-token customization, but we use none of those, it adds a branding resource, and it costs about 3x per MAU above the free tier. Also rejected: Plus, which adds threat protection we don't need and has no free tier.
@@ -813,6 +816,14 @@ build; don't let it drift from the code.
 - Evidence: The regenerated `services/api/openapi.json` and `packages/api-client/src/generated.ts` were uncommitted working-tree changes at check time.
 - Fix: Substituted a byte-compare. Copy both working files, regenerate, then `cmp` each against its copy. Both were identical, meaning the committed artifacts match the code. CI's `openapi-check` and `api-client-check` then run against the pushed commit.
 - Lesson: Locally, a drift check before commit compares regenerate-vs-working-copy. CI's drift check on the pushed commit is the authority.
+
+### 2026-10-29: Cognito domain prefix used the AWS account ID (caught in review before deploy)
+
+- Symptom: `AuthStack` built its hosted-UI domain prefix as `seller-copilot-${Aws.ACCOUNT_ID}`. Once deployed, every sign-in and sign-out URL (`https://seller-copilot-<account id>.auth.us-east-1.amazoncognito.com/...`) would have shown the AWS account number to anyone who saw it.
+- Root cause: The account ID was used as an easy source of uniqueness for a globally shared name, without considering that the name becomes part of a public URL. Neither the stack's tests nor its review looked at public names for identifiers.
+- Evidence: `infra/lib/auth-stack.ts` line 96 at `cdf2137`: `` cognitoDomain: { domainPrefix: `seller-copilot-${Aws.ACCOUNT_ID}` }, ``. The synthesized template had `"Domain": {"Fn::Join": ["", ["seller-copilot-", {"Ref": "AWS::AccountId"}]]}`. It was caught in review before any deploy, so nothing was published.
+- Fix: A fixed random prefix, `seller-copilot-cbsn9z`, kept as the `HOSTED_DOMAIN_PREFIX` constant and generated with Python's `secrets` module. Jest asserts the template's `Domain` is that literal string, with no `AWS::AccountId` token and no 12-digit run, and that it follows Cognito's prefix rules. Negative test: putting `Aws.ACCOUNT_ID` back fails 2 tests.
+- Lesson: Anything that becomes a public URL or name (domains, bucket names, hosted-UI prefixes, URLs in emails) gets reviewed for identifiers before it ships. Use a random suffix for uniqueness, not an account or user identifier.
 
 ## Known open issues
 

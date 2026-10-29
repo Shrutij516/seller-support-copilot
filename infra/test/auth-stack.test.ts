@@ -4,7 +4,14 @@ import { join } from "node:path";
 import { App } from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
 
-import { AUTH_REGION, AuthStack, USER_GROUPS, WEB_CALLBACK_URL, WEB_LOGOUT_URL } from "../lib/auth-stack";
+import {
+  AUTH_REGION,
+  AuthStack,
+  HOSTED_DOMAIN_PREFIX,
+  USER_GROUPS,
+  WEB_CALLBACK_URL,
+  WEB_LOGOUT_URL,
+} from "../lib/auth-stack";
 
 function synth(): Template {
   const app = new App();
@@ -98,12 +105,31 @@ describe("AuthStack", () => {
     for (const scope of requested) expect(["openid", "email", "profile"]).toContain(scope);
   });
 
-  test("prefix domain on the classic hosted UI (Lite plan)", () => {
+  test("prefix domain on the classic hosted UI (Lite plan) uses the fixed prefix constant", () => {
     template.hasResourceProperties("AWS::Cognito::UserPoolDomain", {
-      Domain: { "Fn::Join": ["", ["seller-copilot-", { Ref: "AWS::AccountId" }]] },
+      Domain: HOSTED_DOMAIN_PREFIX,
       ManagedLoginVersion: 1,
       CustomDomainConfig: Match.absent(),
     });
+  });
+
+  test("domain prefix never contains the account ID (it would be public in every login URL)", () => {
+    const domains = Object.values(template.findResources("AWS::Cognito::UserPoolDomain")).map(
+      (r) => (r.Properties as { Domain: unknown }).Domain,
+    );
+    expect(domains).toHaveLength(1);
+    expect(typeof domains[0]).toBe("string"); // a literal, not an intrinsic built from tokens
+    expect(JSON.stringify(domains[0])).not.toContain("AWS::AccountId");
+    expect(HOSTED_DOMAIN_PREFIX).not.toMatch(/\d{12}/);
+  });
+
+  test("domain prefix follows Cognito's prefix rules", () => {
+    // CreateUserPoolDomain Domain pattern, plus the developer guide's reserved terms.
+    expect(HOSTED_DOMAIN_PREFIX).toMatch(/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/);
+    for (const reserved of ["aws", "amazon", "cognito"]) {
+      expect(HOSTED_DOMAIN_PREFIX).not.toContain(reserved);
+    }
+    expect(HOSTED_DOMAIN_PREFIX).toMatch(/^seller-copilot-[a-z0-9]{6}$/);
   });
 
   test("outputs the values the web app and API need", () => {

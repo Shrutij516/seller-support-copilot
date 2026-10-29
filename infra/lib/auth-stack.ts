@@ -1,4 +1,4 @@
-import { Aws, CfnOutput, Duration, RemovalPolicy, Stack, type StackProps } from "aws-cdk-lib";
+import { CfnOutput, Duration, RemovalPolicy, Stack, type StackProps } from "aws-cdk-lib";
 import {
   AccountRecovery,
   CfnUserPoolClient,
@@ -22,6 +22,15 @@ export const WEB_LOGOUT_URL = "http://localhost:3000";
 
 // Must match the API's require_role(...) checks and the web's role gating (cognito:groups).
 export const USER_GROUPS = ["seller", "admin"] as const;
+
+// Cognito prefix domain for the hosted UI: <prefix>.auth.us-east-1.amazoncognito.com, a public
+// URL every user sees. Fixed random suffix, generated once with a CSPRNG:
+//   python3 -c "import secrets, string; print(''.join(secrets.choice(string.ascii_lowercase + string.digits) for _ in range(6)))"
+// NOT the account ID: that would publish the AWS account number in every login URL.
+// Rules (CreateUserPoolDomain): ^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$, and no "aws", "amazon"
+// or "cognito" substrings (Cognito developer guide, "Reserved terms"). If a deploy fails
+// because the prefix is taken, generate a new suffix the same way.
+export const HOSTED_DOMAIN_PREFIX = "seller-copilot-cbsn9z";
 
 /**
  * Cognito user pool for the web app (oidc-client-ts, Authorization Code + PKCE) and the API's
@@ -93,7 +102,7 @@ export class AuthStack extends Stack {
 
     const domain = new UserPoolDomain(this, "Domain", {
       userPool,
-      cognitoDomain: { domainPrefix: `seller-copilot-${Aws.ACCOUNT_ID}` },
+      cognitoDomain: { domainPrefix: HOSTED_DOMAIN_PREFIX },
       managedLoginVersion: ManagedLoginVersion.CLASSIC_HOSTED_UI,
     });
 
