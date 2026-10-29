@@ -282,11 +282,12 @@ build; don't let it drift from the code.
   - **0.55 costs no real question.** It keeps 20/20 in-scope (lowest in-scope top score 0.584, in-19) and still skips the model entirely for the 4 clearly unrelated questions (out-01, -02, -03, -08, top scores 0.511–0.533).
 - Rejected alternative: 0.614, the calibration script's "keep ≥95% in-scope" value. It refuses 1 of 20 real questions (in-19, the paraphrased refurbished-laptop photo question at 0.584), and in this sample refuses exactly the same 4 out-of-scope questions as 0.55. So it costs a real answer and buys nothing. Also rejected: keeping 0.3, which lets every question through, including keyboard mash.
 - Tradeoff we accept: Most off-topic questions (6/10 here) still reach the model and rely on the prompt to decline. At about 2,000 input and 70 output tokens per question (answers eval: 60,756 / 2,056 tokens over 30 questions), each costs roughly $0.003 at Haiku 4.5's Geo on-demand price. That's an estimate, and abuse at volume is a rate-limiting problem, not a threshold one. The margin under the weakest real question is thin (0.584 vs 0.55), and 20 author-written questions is a small sample.
+- After hierarchical chunking (`retrieval-2026-10-29-04.json`): **kept at 0.55.** The lowest in-scope top score rose to 0.621 (from 0.584), so the margin under the weakest real question widened. Rejected: re-tuning the floor upward to the new numbers. On a 30-question, author-written set, chasing each run's minimum is overfitting, and the floor is a cost guard, not the refusal mechanism, so a little extra headroom costs nothing.
 - Revisit if: Real seller questions arrive (re-run the calibration on them), the embedding model or chunking changes, or the answer eval's out-of-scope refusals regress (the prompt is doing the work, so that's where to look first).
 
 ## Hierarchical chunking
 
-- Status: Code and synth only (branch `feat/kb-hierarchical-chunking`). Not deployed; the owner deploys, re-ingests and re-runs both evals.
+- Status: In use. Deployed by the account owner and verified live (2026-10-29); results below.
 - What it does: `KnowledgeBaseStack`'s data source switches from FIXED_SIZE (300 tokens, 20% overlap) to HIERARCHICAL: parent `maxTokens` 1000, child `maxTokens` 150, `overlapTokens` 30. Bedrock embeds and matches the small child chunks. At retrieval it replaces each matched child with its parent chunk, so the model gets the surrounding section rather than a 300-token slice. Our policy docs are about 500–720 words (roughly 700–950 tokens), so a parent is close to a whole document.
 - Why we chose it: The fixed-size split regressed in-scope answers from 20/20 to 18/20 (see Incidents, "Fixed-size chunking split facts across chunks"). in-09 lost "returns the referral fee" to an unretrieved neighbor chunk, and in-15's fact-bearing intro chunk wasn't retrieved at all. Small children give precise matching (a 150-token chunk about "order defect rate" embeds close to that question), and the parent returns the whole fact with its context. That's the 20/20 behavior we had when files came back whole, without the oversized-embedding problem.
 - **AWS caveat, stated plainly:** the Bedrock chunking guide says "Hierarchical chunking is not recommended when using S3 vector bucket as your vector store. When using high number of tokens for chunking (over 8000 tokens combined), you may run into metadata size limitations." (https://docs.aws.amazon.com/bedrock/latest/userguide/kb-chunking.html#kb-hiearchical-chunking). The S3 Vectors docs explain that parent and child relationships and hierarchical context are stored as non-filterable metadata (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-vectors-bedrock-kb.html#s3-vectors-bedrock-kb-limits), and the limit is 40 KB total metadata per vector (2 KB filterable) (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-vectors-limitations.html). Our combined 1,150 tokens is about 14% of the 8,000-token warning level. A 1,000-token parent is roughly 4–5 KB of text, well under 40 KB. `AMAZON_BEDROCK_TEXT` and `AMAZON_BEDROCK_METADATA` are already non-filterable on the index. A Jest test keeps combined tokens at or below 2,000. If ingestion reports metadata-size failures, this is the first suspect.
@@ -297,7 +298,14 @@ build; don't let it drift from the code.
   - **Permissions:** the CloudFormation execution policy already allows Create, Get, Update and DeleteDataSource and GetKnowledgeBase on the KB ARN, which is everything the `AWS::Bedrock::DataSource` handlers need without KMS. A new Jest test pins that. Bedrock deletes the old vectors with the KB service role, which already has `s3vectors:DeleteVectors`.
 - Retrieval side effect: because child matches are replaced by their parents, and children of the same parent collapse into one result, Retrieve can return **fewer than `numberOfResults` (top_k=5)** chunks. The chunking guide says: "the returned number of results might be less than the requested amount". Nothing in the pipeline assumes exactly five. The retrieval eval's hit@5 now means "within whatever came back".
 - Rejected alternative: larger fixed chunks (e.g. 600–800 tokens). That fixes boundary splits by making chunks almost whole docs, but each embedding then mixes several topics again, the precision problem the table fix removed. Also rejected: semantic chunking. It costs a foundation-model call at ingest, its boundaries are opaque and can still split a fact from its qualifier, and it changes how every file is split in a way that's hard to reason about. Also rejected: pre-splitting docs by section into separate files with NONE chunking. Precise and fully under our control, but it makes the corpus layout an ingest artifact, multiplies files to maintain, and needs a tested splitter.
-- Tradeoff we accept: more input tokens per answer, since each retrieved result is now a ~1,000-token parent instead of a 300-token chunk. Up to about 5,000 context tokens if five distinct parents come back, though with six docs and parents near document size, duplicates usually collapse that. That's roughly 2–3x the per-question cost seen with fixed-size chunks (the eval's estimated-cost line will show it). We also accept AWS's "not recommended with S3 Vectors" caveat, at a deliberately small token size.
+- Tradeoff we accept: each retrieved result is a whole-document parent (~577–745 tokens) instead of a ~300-token chunk, and we accept AWS's "not recommended with S3 Vectors" caveat at a deliberately small token size. The entry originally predicted "roughly 2–3x the per-question cost"; measured input tokens actually went **down** (see results). That prediction was wrong; see the fixed-size incident's "What each reviewer missed".
+- Measured results (owner's live runs, exact output verified by the reviewer):
+  - **Deploy:** CloudFormation replaced the data source (the change set showed `Replacement=Conditional`). New data source `AUKZILCLZK` (`policies-s3-hierarchical`); old `NXNCY57HMT` is gone.
+  - **Old vectors purged** (`dataDeletionPolicy: DELETE` worked): grepping `list-vectors` metadata for `NXNCY57HMT` found 0 vectors; the positive control `AUKZILCLZK` found 36.
+  - **Ingest:** 6 documents indexed, 0 failed. No S3 Vectors metadata-limit failures.
+  - **Retrieval** (`evals/results/retrieval-2026-10-29-04.json`): source-level and fact-level hit@1 95%, hit@5 100%. No question had the right doc without a fact-bearing chunk. Lowest in-scope top score 0.621 (was 0.584). Every source returns exactly 1 distinct parent, ~577–745 tokens, i.e. the whole document. Retrieve returned 1–5 results per question, mean 2.57 (fewer than top_k, as documented).
+  - **Answers** (`evals/results/answers-2026-10-29-04.json`, `rag_min_score` 0.55): in-scope **20/20** (in-09 and in-15 fixed), out-of-scope 9/10. The one miss, out-07, is the known scorer limitation: a safe refusal with zero citations, worded outside the regex. Tokens: 51,606 input / 1,907 output, estimated $0.0673 for 30 questions (about $0.0022 per answer).
+- What this shows: every policy doc is under the 1,000-token parent size, so **parents are whole documents**. Here the benefit is precise child matching (a 150-token chunk embeds close to its question) plus whole-document context for the model, with no fact cut off at a boundary. With docs this short, that's close to "retrieve whole docs, ranked by their best paragraph". The advantage over fixed-size grows with longer docs, where a parent is one section rather than the whole file and fixed-size chunks would split more facts.
 - Revisit if: ingestion reports metadata-size errors, the answer eval doesn't recover in-09 and in-15, or the corpus grows enough that ~1,000-token parents stop being "about one section" (then revisit parent size or pre-splitting by section).
 
 ## Eval harness
@@ -521,8 +529,13 @@ build; don't let it drift from the code.
 - Evidence: The two chunk excerpts above, from the account owner's inspection of the live Retrieve output for in-09 and in-15, and the failures listed in `answers-2026-10-29-03.json`. Before the tables were removed, the three table-containing docs were single whole-file chunks, so "right doc retrieved" implied "fact retrieved". That's why the earlier 20/20 didn't expose the gap.
 - Fix:
   - **Measurement (this branch):** `evals/calibrate_retrieval.py` now reports fact-level hit@1 and hit@5 alongside source-level hit. A chunk counts only if it comes from `expected_source` and itself contains every key term, using the same matcher as the answer eval (`evals/matching.py`). Questions where the right doc was retrieved but no top-5 chunk holds the fact are listed. Each chunk's first 120 characters are now saved, so boundary splits are visible in the results file.
-  - **Retrieval:** hierarchical chunking, on branch `feat/kb-hierarchical-chunking` (see "Hierarchical chunking"). It's code and synth only; deploy, re-ingest and eval are the owner's steps.
+  - **Retrieval:** hierarchical chunking (parent 1,000 / child 150 / overlap 30; see "Hierarchical chunking"), deployed and re-ingested by the account owner. **Verified:** answers in-scope 20/20 (in-09 and in-15 fixed), out-of-scope 9/10 (out-07, known scorer limitation); retrieval source and fact hit@1 95%, hit@5 100%; lowest in-scope top score 0.621 (`evals/results/answers-2026-10-29-04.json`, `retrieval-2026-10-29-04.json`).
   - **Caveat:** in-09's golden `key_terms` is just `["referral fee"]`. That phrase also appears in the fee-schedule chunk, so fact-level hit may still count in-09 as found. Tightening it (e.g. adding "returns|returned") would also change the answer eval's scoring, so it's left for a reviewed change.
+- What each reviewer missed:
+  - **Reviewer:** predicted that hierarchical chunking would raise answer-eval input tokens 2–3x, to about 80–110k.
+  - **Claude Code:** wrote the same "roughly 2–3x the per-question cost" into the "Hierarchical chunking" entry.
+
+  Actual: 51,606, down from 60,756 with fixed-size chunks. Retrieve deduplicates children into their parents, so a question gets about 2–3 whole docs (mean 2.57 results) instead of five ~300-token chunks, often several from the same doc. Both predictions assumed five results per question. They were wrong, and they're recorded here as wrong.
 - Lesson: Source-level hit@k masks passage-level misses once docs have more than one chunk. "The right document came back" isn't "the answer came back". Measure retrieval at the level the model consumes (the chunk), and re-check retrieval metrics whenever chunking changes, even when the change was a fix.
 
 ### 2026-10-29: Piped output masked a failed step in the &&-chained verify command
@@ -541,3 +554,69 @@ build; don't let it drift from the code.
 - Evidence: The run's output showed the traceback followed by `Tests: 34 passed` (no "test added" line), then the meaningless negative result. On the rerun, the test count was 35 and the negative check failed as it should (`1 failed, 34 passed`).
 - Fix: Python helpers are written to files first; the checks then run as one `&&` chain on a single line under `set -o pipefail`. The negative-test script itself now asserts that something failed, so a vacuous pass is an error. The DataSource handler actions were taken from the schema output already recorded earlier in this session, so nothing was re-downloaded.
 - Lesson: An `&&` chain is only as long as its shell line. Heredocs, newlines and pipes without `pipefail` all silently end the protection. A negative test that can pass vacuously is worse than none: assert that the mutation actually produced a failure.
+
+### 2026-10-28: Reviewer proposed `${aws:PrincipalAccount}` in the account field of IAM ARNs
+
+- Symptom: The phase 4c-pre tightening request asked to replace every account wildcard (`::*:` / `:*:`) in `infra/bootstrap/cfn-exec-policy.json` with `${aws:PrincipalAccount}`.
+- Root cause: IAM policy variables are only allowed in the resource portion of an ARN, after the fifth colon. "You can't use a variable to replace parts of the ARN before the fifth colon, such as the service or account" (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_variables.html#policy-vars-wheretouse). A variable in the account field would not have been substituted, so those statements wouldn't have matched any resource.
+- Evidence: The IAM docs quote above, which Claude Code checked before editing, as the request itself asked.
+- Fix: The committed policy uses an `{{ACCOUNT_ID}}` placeholder. `make deploy-policy-create` and `deploy-policy-update` render the caller's account (validated as 12 digits) into a temp file at create time and refuse to continue if any placeholder remains. The account ID is never committed. Tests assert no account wildcard and a clean render.
+- What each reviewer missed:
+  - **Reviewer:** proposed policy-variable placement without checking IAM's rules. Claude Code caught it from the IAM docs.
+- Lesson: Check where IAM allows policy variables before proposing one.
+
+### 2026-10-29: Paraphrased results accepted as proof (twice)
+
+- Symptom: Twice, a summary of a command's output was accepted in place of the output itself:
+  - **"Both outputs expected"** for the access-key checks. This was later re-confirmed with real output, so it happened to be right.
+  - **"Model access ok"** for Bedrock model access. This was wrong: Converse still failed until the Anthropic use-case form was submitted (see "Converse failed until the Anthropic use-case form was submitted").
+- Root cause: The review step treated the account owner's paraphrase as evidence. A paraphrase can't show which command, model, region or profile ran, or what it returned.
+- Evidence: The later `ResourceNotFoundException` ("Model use case details have not been submitted"), which contradicted "model access ok". The access-key re-check did confirm the earlier summary.
+- Fix: Proof of an AWS call is now the exact command and its exact, unedited output. Later phases' live numbers were all "exact output verified".
+- What each reviewer missed:
+  - **Reviewer:** accepted paraphrased results as proof twice. One was wrong.
+- Lesson: Only exact pasted output counts as proof.
+
+### 2026-10-29: PRs #1–#5 approved on Claude Code's reported test counts
+
+- Symptom: The reviewer approved PRs #1–#5 based on the test counts and coverage Claude Code reported, without running the suite independently.
+- Root cause: The review relayed the author's claims instead of verifying them. The author's report and the reviewer's check were the same source.
+- Evidence: The account owner's record of the review process. PRs #1–#5 were approved on reported numbers. From PR #6 onward the reviewer ran lint, mypy, unit and integration tests itself, using local Postgres and moto instead of DynamoDB Local. CI remains the final word.
+- Fix: Independent local verification by the reviewer from PR #6 onward, plus CI on every PR.
+- What each reviewer missed:
+  - **Reviewer:** relayed reported results for five PRs instead of reproducing them.
+- Lesson: Verify, don't relay.
+
+### 2026-10-29: `aws bedrock-agent-runtime retrieve` failed on a query containing commas
+
+- Symptom: The reviewer's `aws bedrock-agent-runtime retrieve --retrieval-query text="...,..."` failed when the query text contained a comma.
+- Root cause: AWS CLI shorthand syntax splits values on commas, so free text with a comma isn't passed as one string.
+- Evidence: The account owner's record: the shorthand form failed, and the JSON form worked.
+- Fix: Pass the parameter as JSON: `--retrieval-query '{"text":"..."}'`.
+- Lesson: Use JSON parameters for free text in the AWS CLI. Shorthand is for simple scalar values.
+
+### 2026-10-29: An eval run overwrote the committed baseline answers file
+
+- Symptom: Rerunning `make eval-answers` the same day overwrote the committed baseline `evals/results/answers-2026-10-29.json` locally with the new run.
+- Root cause: The eval scripts named results by date only and wrote with plain `write_text`, so a second run on the same day replaced the first.
+- Evidence: The local file's `run_at` and summary (8/10 out-of-scope) differed from the committed baseline (7/10). It was recovered with `git checkout --`, and the new run was saved separately as `answers-2026-10-29-02.json`.
+- Fix (already done in phase 4c): both scripts write through `write_new_results`. The first run of a day is `<kind>-<date>.json`, later runs are `-02`, `-03` and so on, opened with exclusive create, so an existing file can never be replaced. Unit tests cover it.
+- Lesson: Results are evidence. Make them append-only.
+
+### 2026-10-29: PR #3's description misstates the Jest split
+
+- Symptom: PR #3 (KnowledgeBaseStack) says Jest ran "16/16 pass, 11 of them new", and Claude Code's phase 4b report said "11 new + 5 existing". The actual split was 10 new KB-stack tests and 6 existing budget tests. The total of 16 was correct.
+- Root cause: The split was written from memory rather than counted from the test files.
+- Evidence: `grep -c '^  test(' infra/test/*.test.ts` at the time gave 10 in the KB suite and 6 in the budget suite. Claude Code found the discrepancy in phase 4c-pre and said so in its report.
+- Fix: Recorded here. PR #3 is merged, so its description still says "11 new". This entry is the correction of record.
+- Lesson: Count, don't recall. Test-count claims in a PR description should come from the test run's output.
+
+### 2026-10-29: Evidence-capture gaps during the hierarchical-chunking deploy
+
+- Symptom: Two evidence problems during the deploy:
+  - **Truncated `cdk diff`:** the output file was attached before the command finished, so it was cut off and had to be re-run.
+  - **Skipped pre-ingest check:** the vector-count check that should have run before ingest was skipped.
+- Root cause: Commands were treated as finished before the prompt returned and the exit code was checked, and the checks weren't run in the order they were stated.
+- Evidence: The account owner's record of the truncated diff file and its complete re-run. The missing pre-ingest check was proven afterward instead: a per-data-source metadata grep of `list-vectors` found 0 vectors for the old data source `NXNCY57HMT` and 36 for the new `AUKZILCLZK`, the positive control showing the grep works.
+- Fix: The diff was re-run to completion. The purge was demonstrated with the per-data-source grep and its positive control.
+- Lesson: Wait for the prompt and exit code before capturing output, and run checks in the stated order. A check proven after the fact needs a positive control to mean anything.

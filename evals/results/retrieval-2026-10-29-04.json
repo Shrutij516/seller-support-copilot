@@ -1,0 +1,1125 @@
+{
+  "run_at": "2026-10-29T15:13:14.338013+00:00",
+  "knowledge_base_id": "LP3DBFHA5R",
+  "region": "us-east-1",
+  "top_k": 5,
+  "golden_file": "retrieval_golden.jsonl",
+  "summary": {
+    "hit_at_1": 0.95,
+    "hit_at_5": 1.0,
+    "fact_hit_at_1": 0.95,
+    "fact_hit_at_5": 1.0,
+    "fact_misses_at_5": [],
+    "hits_by_slice": {
+      "direct": {
+        "n": 12,
+        "hit_at_1": 12,
+        "hit_at_5": 12,
+        "fact_hit_at_1": 12,
+        "fact_hit_at_5": 12
+      },
+      "paraphrase": {
+        "n": 8,
+        "hit_at_1": 7,
+        "hit_at_5": 8,
+        "fact_hit_at_1": 7,
+        "fact_hit_at_5": 8
+      }
+    },
+    "top_score_in_scope": {
+      "n": 20,
+      "min": 0.6213735938072205,
+      "median": 0.7171899378299713,
+      "max": 0.8286511898040771
+    },
+    "top_score_out_of_scope": {
+      "n": 10,
+      "min": 0.5245296061038971,
+      "median": 0.6343801021575928,
+      "max": 0.7461827397346497
+    },
+    "no_chunks": [],
+    "threshold": {
+      "threshold": 0.6498410105705261,
+      "keep_target": 0.95,
+      "in_scope_kept": 19,
+      "in_scope_total": 20,
+      "out_of_scope_refused": 7,
+      "out_of_scope_total": 10,
+      "out_of_scope_at_or_above": [
+        0.6721658110618591,
+        0.7025555372238159,
+        0.7461827397346497
+      ]
+    },
+    "chunks": {
+      "per_source": {
+        "account-health.md": {
+          "distinct_chunks": 1,
+          "max_approx_tokens": 625
+        },
+        "disputes.md": {
+          "distinct_chunks": 1,
+          "max_approx_tokens": 700
+        },
+        "fees.md": {
+          "distinct_chunks": 1,
+          "max_approx_tokens": 577
+        },
+        "listing-rules-and-prohibited-items.md": {
+          "distinct_chunks": 1,
+          "max_approx_tokens": 664
+        },
+        "returns-and-refunds.md": {
+          "distinct_chunks": 1,
+          "max_approx_tokens": 745
+        },
+        "shipping-and-delivery-slas.md": {
+          "distinct_chunks": 1,
+          "max_approx_tokens": 704
+        }
+      },
+      "max_chunk_approx_tokens": 745,
+      "max_chunk_source": "returns-and-refunds.md",
+      "token_estimate": "whitespace words x 1.33 (approximate)"
+    }
+  },
+  "results": [
+    {
+      "id": "in-01",
+      "question": "How many days does a buyer have to request a refund?",
+      "in_scope": true,
+      "slice": "direct",
+      "expected_source": "returns-and-refunds.md",
+      "top_score": 0.754421591758728,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "fact_hit_at_1": true,
+      "fact_hit_at_5": true,
+      "chunks": [
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.754421591758728,
+          "approx_tokens": 745,
+          "text_sha1": "03379eb02980d6b1a4fa0bdf6be89d2894403eef",
+          "excerpt": "# Kestrel Market: Returns and Refunds Policy Kestrel Market wants buyers to feel confident purchasing from any seller on",
+          "has_fact": true
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.6798118054866791,
+          "approx_tokens": 700,
+          "text_sha1": "c9ab780cbb38fcc81d97fdc7d38bfac1fe828bac",
+          "excerpt": "# Kestrel Market: Disputes A dispute is opened when a buyer and seller cannot agree on the outcome of an order, or when ",
+          "has_fact": false
+        },
+        {
+          "source": "fees.md",
+          "score": 0.6750534772872925,
+          "approx_tokens": 577,
+          "text_sha1": "5119da967478c47f67404338a4c1cad48566258c",
+          "excerpt": "# Kestrel Market: Fees This policy explains every fee Kestrel Market charges sellers. All fees are deducted automaticall",
+          "has_fact": false
+        }
+      ]
+    },
+    {
+      "id": "in-02",
+      "question": "A customer's package is still in transit. Can they open a refund request yet?",
+      "in_scope": true,
+      "slice": "paraphrase",
+      "expected_source": "returns-and-refunds.md",
+      "top_score": 0.7805726528167725,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "fact_hit_at_1": true,
+      "fact_hit_at_5": true,
+      "chunks": [
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.7805726528167725,
+          "approx_tokens": 745,
+          "text_sha1": "03379eb02980d6b1a4fa0bdf6be89d2894403eef",
+          "excerpt": "# Kestrel Market: Returns and Refunds Policy Kestrel Market wants buyers to feel confident purchasing from any seller on",
+          "has_fact": true
+        },
+        {
+          "source": "shipping-and-delivery-slas.md",
+          "score": 0.6654743552207947,
+          "approx_tokens": 704,
+          "text_sha1": "f433c7133e16df631002fae5bbdfeca7e3f52eea",
+          "excerpt": "# Kestrel Market: Shipping and Delivery SLAs Buyers choose Kestrel Market because they trust orders will arrive when pro",
+          "has_fact": false
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.6599961519241333,
+          "approx_tokens": 700,
+          "text_sha1": "c9ab780cbb38fcc81d97fdc7d38bfac1fe828bac",
+          "excerpt": "# Kestrel Market: Disputes A dispute is opened when a buyer and seller cannot agree on the outcome of an order, or when ",
+          "has_fact": false
+        }
+      ]
+    },
+    {
+      "id": "in-03",
+      "question": "How long do I have to respond to a refund request before it escalates?",
+      "in_scope": true,
+      "slice": "direct",
+      "expected_source": "returns-and-refunds.md",
+      "top_score": 0.7555599808692932,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "fact_hit_at_1": true,
+      "fact_hit_at_5": true,
+      "chunks": [
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.7555599808692932,
+          "approx_tokens": 745,
+          "text_sha1": "03379eb02980d6b1a4fa0bdf6be89d2894403eef",
+          "excerpt": "# Kestrel Market: Returns and Refunds Policy Kestrel Market wants buyers to feel confident purchasing from any seller on",
+          "has_fact": true
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.6838181018829346,
+          "approx_tokens": 700,
+          "text_sha1": "c9ab780cbb38fcc81d97fdc7d38bfac1fe828bac",
+          "excerpt": "# Kestrel Market: Disputes A dispute is opened when a buyer and seller cannot agree on the outcome of an order, or when ",
+          "has_fact": false
+        },
+        {
+          "source": "fees.md",
+          "score": 0.6408448815345764,
+          "approx_tokens": 577,
+          "text_sha1": "5119da967478c47f67404338a4c1cad48566258c",
+          "excerpt": "# Kestrel Market: Fees This policy explains every fee Kestrel Market charges sellers. All fees are deducted automaticall",
+          "has_fact": false
+        }
+      ]
+    },
+    {
+      "id": "in-04",
+      "question": "Can I make the buyer pay return postage for an item that showed up broken?",
+      "in_scope": true,
+      "slice": "paraphrase",
+      "expected_source": "returns-and-refunds.md",
+      "top_score": 0.7056821584701538,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "fact_hit_at_1": true,
+      "fact_hit_at_5": true,
+      "chunks": [
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.7056821584701538,
+          "approx_tokens": 745,
+          "text_sha1": "03379eb02980d6b1a4fa0bdf6be89d2894403eef",
+          "excerpt": "# Kestrel Market: Returns and Refunds Policy Kestrel Market wants buyers to feel confident purchasing from any seller on",
+          "has_fact": true
+        },
+        {
+          "source": "shipping-and-delivery-slas.md",
+          "score": 0.6586104333400726,
+          "approx_tokens": 704,
+          "text_sha1": "f433c7133e16df631002fae5bbdfeca7e3f52eea",
+          "excerpt": "# Kestrel Market: Shipping and Delivery SLAs Buyers choose Kestrel Market because they trust orders will arrive when pro",
+          "has_fact": false
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.6223597228527069,
+          "approx_tokens": 700,
+          "text_sha1": "c9ab780cbb38fcc81d97fdc7d38bfac1fe828bac",
+          "excerpt": "# Kestrel Market: Disputes A dispute is opened when a buyer and seller cannot agree on the outcome of an order, or when ",
+          "has_fact": false
+        }
+      ]
+    },
+    {
+      "id": "in-05",
+      "question": "Can a buyer have two refund requests open on the same order?",
+      "in_scope": true,
+      "slice": "direct",
+      "expected_source": "returns-and-refunds.md",
+      "top_score": 0.7519772052764893,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "fact_hit_at_1": true,
+      "fact_hit_at_5": true,
+      "chunks": [
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.7519772052764893,
+          "approx_tokens": 745,
+          "text_sha1": "03379eb02980d6b1a4fa0bdf6be89d2894403eef",
+          "excerpt": "# Kestrel Market: Returns and Refunds Policy Kestrel Market wants buyers to feel confident purchasing from any seller on",
+          "has_fact": true
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.6558581292629242,
+          "approx_tokens": 700,
+          "text_sha1": "c9ab780cbb38fcc81d97fdc7d38bfac1fe828bac",
+          "excerpt": "# Kestrel Market: Disputes A dispute is opened when a buyer and seller cannot agree on the outcome of an order, or when ",
+          "has_fact": false
+        }
+      ]
+    },
+    {
+      "id": "in-06",
+      "question": "What is the referral fee for electronics?",
+      "in_scope": true,
+      "slice": "direct",
+      "expected_source": "fees.md",
+      "top_score": 0.7183612585067749,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "fact_hit_at_1": true,
+      "fact_hit_at_5": true,
+      "chunks": [
+        {
+          "source": "fees.md",
+          "score": 0.7183612585067749,
+          "approx_tokens": 577,
+          "text_sha1": "5119da967478c47f67404338a4c1cad48566258c",
+          "excerpt": "# Kestrel Market: Fees This policy explains every fee Kestrel Market charges sellers. All fees are deducted automaticall",
+          "has_fact": true
+        }
+      ]
+    },
+    {
+      "id": "in-07",
+      "question": "Is the Pro plan worth it if I sell about 100 items a month?",
+      "in_scope": true,
+      "slice": "paraphrase",
+      "expected_source": "fees.md",
+      "top_score": 0.7109846472740173,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "fact_hit_at_1": true,
+      "fact_hit_at_5": true,
+      "chunks": [
+        {
+          "source": "fees.md",
+          "score": 0.7109846472740173,
+          "approx_tokens": 577,
+          "text_sha1": "5119da967478c47f67404338a4c1cad48566258c",
+          "excerpt": "# Kestrel Market: Fees This policy explains every fee Kestrel Market charges sellers. All fees are deducted automaticall",
+          "has_fact": true
+        },
+        {
+          "source": "account-health.md",
+          "score": 0.6102332174777985,
+          "approx_tokens": 625,
+          "text_sha1": "37242f5b306106b43525d83c89bb9528f7fb0ec6",
+          "excerpt": "# Kestrel Market: Account Health Account Health is Kestrel Market's single score summarizing how reliably a seller is fu",
+          "has_fact": false
+        },
+        {
+          "source": "listing-rules-and-prohibited-items.md",
+          "score": 0.5888539552688599,
+          "approx_tokens": 664,
+          "text_sha1": "ebef7ce4065eaaa990a9a0991d3401640e915af4",
+          "excerpt": "# Kestrel Market: Listing Rules and Prohibited Items Every listing on Kestrel Market represents the platform to a buyer,",
+          "has_fact": false
+        }
+      ]
+    },
+    {
+      "id": "in-08",
+      "question": "How much does warehouse storage cost in November?",
+      "in_scope": true,
+      "slice": "direct",
+      "expected_source": "fees.md",
+      "top_score": 0.7400406002998352,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "fact_hit_at_1": true,
+      "fact_hit_at_5": true,
+      "chunks": [
+        {
+          "source": "fees.md",
+          "score": 0.7400406002998352,
+          "approx_tokens": 577,
+          "text_sha1": "5119da967478c47f67404338a4c1cad48566258c",
+          "excerpt": "# Kestrel Market: Fees This policy explains every fee Kestrel Market charges sellers. All fees are deducted automaticall",
+          "has_fact": true
+        },
+        {
+          "source": "account-health.md",
+          "score": 0.5638983845710754,
+          "approx_tokens": 625,
+          "text_sha1": "37242f5b306106b43525d83c89bb9528f7fb0ec6",
+          "excerpt": "# Kestrel Market: Account Health Account Health is Kestrel Market's single score summarizing how reliably a seller is fu",
+          "has_fact": false
+        }
+      ]
+    },
+    {
+      "id": "in-09",
+      "question": "When an order gets refunded, do I get my commission back?",
+      "in_scope": true,
+      "slice": "paraphrase",
+      "expected_source": "fees.md",
+      "top_score": 0.694519579410553,
+      "hit_at_1": false,
+      "hit_at_5": true,
+      "fact_hit_at_1": false,
+      "fact_hit_at_5": true,
+      "chunks": [
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.694519579410553,
+          "approx_tokens": 745,
+          "text_sha1": "03379eb02980d6b1a4fa0bdf6be89d2894403eef",
+          "excerpt": "# Kestrel Market: Returns and Refunds Policy Kestrel Market wants buyers to feel confident purchasing from any seller on",
+          "has_fact": false
+        },
+        {
+          "source": "fees.md",
+          "score": 0.6531431078910828,
+          "approx_tokens": 577,
+          "text_sha1": "5119da967478c47f67404338a4c1cad48566258c",
+          "excerpt": "# Kestrel Market: Fees This policy explains every fee Kestrel Market charges sellers. All fees are deducted automaticall",
+          "has_fact": true
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.6416751146316528,
+          "approx_tokens": 700,
+          "text_sha1": "c9ab780cbb38fcc81d97fdc7d38bfac1fe828bac",
+          "excerpt": "# Kestrel Market: Disputes A dispute is opened when a buyer and seller cannot agree on the outcome of an order, or when ",
+          "has_fact": false
+        }
+      ]
+    },
+    {
+      "id": "in-10",
+      "question": "How often are payouts issued?",
+      "in_scope": true,
+      "slice": "direct",
+      "expected_source": "fees.md",
+      "top_score": 0.686974287033081,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "fact_hit_at_1": true,
+      "fact_hit_at_5": true,
+      "chunks": [
+        {
+          "source": "fees.md",
+          "score": 0.686974287033081,
+          "approx_tokens": 577,
+          "text_sha1": "5119da967478c47f67404338a4c1cad48566258c",
+          "excerpt": "# Kestrel Market: Fees This policy explains every fee Kestrel Market charges sellers. All fees are deducted automaticall",
+          "has_fact": true
+        },
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.5817953944206238,
+          "approx_tokens": 745,
+          "text_sha1": "03379eb02980d6b1a4fa0bdf6be89d2894403eef",
+          "excerpt": "# Kestrel Market: Returns and Refunds Policy Kestrel Market wants buyers to feel confident purchasing from any seller on",
+          "has_fact": false
+        },
+        {
+          "source": "shipping-and-delivery-slas.md",
+          "score": 0.5500547289848328,
+          "approx_tokens": 704,
+          "text_sha1": "f433c7133e16df631002fae5bbdfeca7e3f52eea",
+          "excerpt": "# Kestrel Market: Shipping and Delivery SLAs Buyers choose Kestrel Market because they trust orders will arrive when pro",
+          "has_fact": false
+        }
+      ]
+    },
+    {
+      "id": "in-11",
+      "question": "What is the delivery SLA for expedited shipping?",
+      "in_scope": true,
+      "slice": "direct",
+      "expected_source": "shipping-and-delivery-slas.md",
+      "top_score": 0.7813194990158081,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "fact_hit_at_1": true,
+      "fact_hit_at_5": true,
+      "chunks": [
+        {
+          "source": "shipping-and-delivery-slas.md",
+          "score": 0.7813194990158081,
+          "approx_tokens": 704,
+          "text_sha1": "f433c7133e16df631002fae5bbdfeca7e3f52eea",
+          "excerpt": "# Kestrel Market: Shipping and Delivery SLAs Buyers choose Kestrel Market because they trust orders will arrive when pro",
+          "has_fact": true
+        },
+        {
+          "source": "account-health.md",
+          "score": 0.6698765754699707,
+          "approx_tokens": 625,
+          "text_sha1": "37242f5b306106b43525d83c89bb9528f7fb0ec6",
+          "excerpt": "# Kestrel Market: Account Health Account Health is Kestrel Market's single score summarizing how reliably a seller is fu",
+          "has_fact": false
+        }
+      ]
+    },
+    {
+      "id": "in-12",
+      "question": "After how long without a tracking update is a package treated as lost?",
+      "in_scope": true,
+      "slice": "paraphrase",
+      "expected_source": "shipping-and-delivery-slas.md",
+      "top_score": 0.8286511898040771,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "fact_hit_at_1": true,
+      "fact_hit_at_5": true,
+      "chunks": [
+        {
+          "source": "shipping-and-delivery-slas.md",
+          "score": 0.8286511898040771,
+          "approx_tokens": 704,
+          "text_sha1": "f433c7133e16df631002fae5bbdfeca7e3f52eea",
+          "excerpt": "# Kestrel Market: Shipping and Delivery SLAs Buyers choose Kestrel Market because they trust orders will arrive when pro",
+          "has_fact": true
+        },
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.6095499992370605,
+          "approx_tokens": 745,
+          "text_sha1": "03379eb02980d6b1a4fa0bdf6be89d2894403eef",
+          "excerpt": "# Kestrel Market: Returns and Refunds Policy Kestrel Market wants buyers to feel confident purchasing from any seller on",
+          "has_fact": false
+        },
+        {
+          "source": "listing-rules-and-prohibited-items.md",
+          "score": 0.6064540147781372,
+          "approx_tokens": 664,
+          "text_sha1": "ebef7ce4065eaaa990a9a0991d3401640e915af4",
+          "excerpt": "# Kestrel Market: Listing Rules and Prohibited Items Every listing on Kestrel Market represents the platform to a buyer,",
+          "has_fact": false
+        }
+      ]
+    },
+    {
+      "id": "in-13",
+      "question": "Do I need tracking on every shipment?",
+      "in_scope": true,
+      "slice": "direct",
+      "expected_source": "shipping-and-delivery-slas.md",
+      "top_score": 0.7539483308792114,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "fact_hit_at_1": true,
+      "fact_hit_at_5": true,
+      "chunks": [
+        {
+          "source": "shipping-and-delivery-slas.md",
+          "score": 0.7539483308792114,
+          "approx_tokens": 704,
+          "text_sha1": "f433c7133e16df631002fae5bbdfeca7e3f52eea",
+          "excerpt": "# Kestrel Market: Shipping and Delivery SLAs Buyers choose Kestrel Market because they trust orders will arrive when pro",
+          "has_fact": true
+        },
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.5908802449703217,
+          "approx_tokens": 745,
+          "text_sha1": "03379eb02980d6b1a4fa0bdf6be89d2894403eef",
+          "excerpt": "# Kestrel Market: Returns and Refunds Policy Kestrel Market wants buyers to feel confident purchasing from any seller on",
+          "has_fact": false
+        }
+      ]
+    },
+    {
+      "id": "in-14",
+      "question": "I picked the 1-2 day handling tier but I keep shipping late. When does that become a problem?",
+      "in_scope": true,
+      "slice": "paraphrase",
+      "expected_source": "shipping-and-delivery-slas.md",
+      "top_score": 0.7160186171531677,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "fact_hit_at_1": true,
+      "fact_hit_at_5": true,
+      "chunks": [
+        {
+          "source": "shipping-and-delivery-slas.md",
+          "score": 0.7160186171531677,
+          "approx_tokens": 704,
+          "text_sha1": "f433c7133e16df631002fae5bbdfeca7e3f52eea",
+          "excerpt": "# Kestrel Market: Shipping and Delivery SLAs Buyers choose Kestrel Market because they trust orders will arrive when pro",
+          "has_fact": true
+        }
+      ]
+    },
+    {
+      "id": "in-15",
+      "question": "What order defect rate do I need to stay under?",
+      "in_scope": true,
+      "slice": "direct",
+      "expected_source": "account-health.md",
+      "top_score": 0.6736044883728027,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "fact_hit_at_1": true,
+      "fact_hit_at_5": true,
+      "chunks": [
+        {
+          "source": "account-health.md",
+          "score": 0.6736044883728027,
+          "approx_tokens": 625,
+          "text_sha1": "37242f5b306106b43525d83c89bb9528f7fb0ec6",
+          "excerpt": "# Kestrel Market: Account Health Account Health is Kestrel Market's single score summarizing how reliably a seller is fu",
+          "has_fact": true
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.6525132656097412,
+          "approx_tokens": 700,
+          "text_sha1": "c9ab780cbb38fcc81d97fdc7d38bfac1fe828bac",
+          "excerpt": "# Kestrel Market: Disputes A dispute is opened when a buyer and seller cannot agree on the outcome of an order, or when ",
+          "has_fact": false
+        },
+        {
+          "source": "shipping-and-delivery-slas.md",
+          "score": 0.6229575276374817,
+          "approx_tokens": 704,
+          "text_sha1": "f433c7133e16df631002fae5bbdfeca7e3f52eea",
+          "excerpt": "# Kestrel Market: Shipping and Delivery SLAs Buyers choose Kestrel Market because they trust orders will arrive when pro",
+          "has_fact": false
+        }
+      ]
+    },
+    {
+      "id": "in-16",
+      "question": "My health score dropped to 62. What happens now?",
+      "in_scope": true,
+      "slice": "paraphrase",
+      "expected_source": "account-health.md",
+      "top_score": 0.6590181589126587,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "fact_hit_at_1": true,
+      "fact_hit_at_5": true,
+      "chunks": [
+        {
+          "source": "account-health.md",
+          "score": 0.6590181589126587,
+          "approx_tokens": 625,
+          "text_sha1": "37242f5b306106b43525d83c89bb9528f7fb0ec6",
+          "excerpt": "# Kestrel Market: Account Health Account Health is Kestrel Market's single score summarizing how reliably a seller is fu",
+          "has_fact": true
+        }
+      ]
+    },
+    {
+      "id": "in-17",
+      "question": "How long do I have to appeal a suspension?",
+      "in_scope": true,
+      "slice": "direct",
+      "expected_source": "account-health.md",
+      "top_score": 0.6498410105705261,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "fact_hit_at_1": true,
+      "fact_hit_at_5": true,
+      "chunks": [
+        {
+          "source": "account-health.md",
+          "score": 0.6498410105705261,
+          "approx_tokens": 625,
+          "text_sha1": "37242f5b306106b43525d83c89bb9528f7fb0ec6",
+          "excerpt": "# Kestrel Market: Account Health Account Health is Kestrel Market's single score summarizing how reliably a seller is fu",
+          "has_fact": true
+        },
+        {
+          "source": "listing-rules-and-prohibited-items.md",
+          "score": 0.5713565945625305,
+          "approx_tokens": 664,
+          "text_sha1": "ebef7ce4065eaaa990a9a0991d3401640e915af4",
+          "excerpt": "# Kestrel Market: Listing Rules and Prohibited Items Every listing on Kestrel Market represents the platform to a buyer,",
+          "has_fact": false
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.5634818971157074,
+          "approx_tokens": 700,
+          "text_sha1": "c9ab780cbb38fcc81d97fdc7d38bfac1fe828bac",
+          "excerpt": "# Kestrel Market: Disputes A dispute is opened when a buyer and seller cannot agree on the outcome of an order, or when ",
+          "has_fact": false
+        }
+      ]
+    },
+    {
+      "id": "in-18",
+      "question": "Can I sell alcohol on Kestrel Market?",
+      "in_scope": true,
+      "slice": "direct",
+      "expected_source": "listing-rules-and-prohibited-items.md",
+      "top_score": 0.8214561939239502,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "fact_hit_at_1": true,
+      "fact_hit_at_5": true,
+      "chunks": [
+        {
+          "source": "listing-rules-and-prohibited-items.md",
+          "score": 0.8214561939239502,
+          "approx_tokens": 664,
+          "text_sha1": "ebef7ce4065eaaa990a9a0991d3401640e915af4",
+          "excerpt": "# Kestrel Market: Listing Rules and Prohibited Items Every listing on Kestrel Market represents the platform to a buyer,",
+          "has_fact": true
+        },
+        {
+          "source": "fees.md",
+          "score": 0.7450225651264191,
+          "approx_tokens": 577,
+          "text_sha1": "5119da967478c47f67404338a4c1cad48566258c",
+          "excerpt": "# Kestrel Market: Fees This policy explains every fee Kestrel Market charges sellers. All fees are deducted automaticall",
+          "has_fact": false
+        }
+      ]
+    },
+    {
+      "id": "in-19",
+      "question": "Is it okay to use the manufacturer's product photos for a refurbished laptop?",
+      "in_scope": true,
+      "slice": "paraphrase",
+      "expected_source": "listing-rules-and-prohibited-items.md",
+      "top_score": 0.6213735938072205,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "fact_hit_at_1": true,
+      "fact_hit_at_5": true,
+      "chunks": [
+        {
+          "source": "listing-rules-and-prohibited-items.md",
+          "score": 0.6213735938072205,
+          "approx_tokens": 664,
+          "text_sha1": "ebef7ce4065eaaa990a9a0991d3401640e915af4",
+          "excerpt": "# Kestrel Market: Listing Rules and Prohibited Items Every listing on Kestrel Market represents the platform to a buyer,",
+          "has_fact": true
+        },
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.5921178162097931,
+          "approx_tokens": 745,
+          "text_sha1": "03379eb02980d6b1a4fa0bdf6be89d2894403eef",
+          "excerpt": "# Kestrel Market: Returns and Refunds Policy Kestrel Market wants buyers to feel confident purchasing from any seller on",
+          "has_fact": false
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.5722657442092896,
+          "approx_tokens": 700,
+          "text_sha1": "c9ab780cbb38fcc81d97fdc7d38bfac1fe828bac",
+          "excerpt": "# Kestrel Market: Disputes A dispute is opened when a buyer and seller cannot agree on the outcome of an order, or when ",
+          "has_fact": false
+        }
+      ]
+    },
+    {
+      "id": "in-20",
+      "question": "How long do I have to submit evidence for a chargeback, and what happens if I lose?",
+      "in_scope": true,
+      "slice": "direct",
+      "expected_source": "disputes.md",
+      "top_score": 0.6904401183128357,
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "fact_hit_at_1": true,
+      "fact_hit_at_5": true,
+      "chunks": [
+        {
+          "source": "disputes.md",
+          "score": 0.6904401183128357,
+          "approx_tokens": 700,
+          "text_sha1": "c9ab780cbb38fcc81d97fdc7d38bfac1fe828bac",
+          "excerpt": "# Kestrel Market: Disputes A dispute is opened when a buyer and seller cannot agree on the outcome of an order, or when ",
+          "has_fact": true
+        },
+        {
+          "source": "account-health.md",
+          "score": 0.609468549489975,
+          "approx_tokens": 625,
+          "text_sha1": "37242f5b306106b43525d83c89bb9528f7fb0ec6",
+          "excerpt": "# Kestrel Market: Account Health Account Health is Kestrel Market's single score summarizing how reliably a seller is fu",
+          "has_fact": false
+        }
+      ]
+    },
+    {
+      "id": "out-01",
+      "question": "What is the capital of France?",
+      "in_scope": false,
+      "slice": "general-knowledge",
+      "expected_source": null,
+      "top_score": 0.5395890772342682,
+      "hit_at_1": null,
+      "hit_at_5": null,
+      "fact_hit_at_1": null,
+      "fact_hit_at_5": null,
+      "chunks": [
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.5395890772342682,
+          "approx_tokens": 745,
+          "text_sha1": "03379eb02980d6b1a4fa0bdf6be89d2894403eef",
+          "excerpt": "# Kestrel Market: Returns and Refunds Policy Kestrel Market wants buyers to feel confident purchasing from any seller on",
+          "has_fact": null
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.5341232120990753,
+          "approx_tokens": 700,
+          "text_sha1": "c9ab780cbb38fcc81d97fdc7d38bfac1fe828bac",
+          "excerpt": "# Kestrel Market: Disputes A dispute is opened when a buyer and seller cannot agree on the outcome of an order, or when ",
+          "has_fact": null
+        },
+        {
+          "source": "fees.md",
+          "score": 0.5235637128353119,
+          "approx_tokens": 577,
+          "text_sha1": "5119da967478c47f67404338a4c1cad48566258c",
+          "excerpt": "# Kestrel Market: Fees This policy explains every fee Kestrel Market charges sellers. All fees are deducted automaticall",
+          "has_fact": null
+        }
+      ]
+    },
+    {
+      "id": "out-02",
+      "question": "How do I bake sourdough bread?",
+      "in_scope": false,
+      "slice": "general-knowledge",
+      "expected_source": null,
+      "top_score": 0.5245296061038971,
+      "hit_at_1": null,
+      "hit_at_5": null,
+      "fact_hit_at_1": null,
+      "fact_hit_at_5": null,
+      "chunks": [
+        {
+          "source": "listing-rules-and-prohibited-items.md",
+          "score": 0.5245296061038971,
+          "approx_tokens": 664,
+          "text_sha1": "ebef7ce4065eaaa990a9a0991d3401640e915af4",
+          "excerpt": "# Kestrel Market: Listing Rules and Prohibited Items Every listing on Kestrel Market represents the platform to a buyer,",
+          "has_fact": null
+        },
+        {
+          "source": "shipping-and-delivery-slas.md",
+          "score": 0.5176191031932831,
+          "approx_tokens": 704,
+          "text_sha1": "f433c7133e16df631002fae5bbdfeca7e3f52eea",
+          "excerpt": "# Kestrel Market: Shipping and Delivery SLAs Buyers choose Kestrel Market because they trust orders will arrive when pro",
+          "has_fact": null
+        },
+        {
+          "source": "account-health.md",
+          "score": 0.5125146508216858,
+          "approx_tokens": 625,
+          "text_sha1": "37242f5b306106b43525d83c89bb9528f7fb0ec6",
+          "excerpt": "# Kestrel Market: Account Health Account Health is Kestrel Market's single score summarizing how reliably a seller is fu",
+          "has_fact": null
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.5105368793010712,
+          "approx_tokens": 700,
+          "text_sha1": "c9ab780cbb38fcc81d97fdc7d38bfac1fe828bac",
+          "excerpt": "# Kestrel Market: Disputes A dispute is opened when a buyer and seller cannot agree on the outcome of an order, or when ",
+          "has_fact": null
+        }
+      ]
+    },
+    {
+      "id": "out-03",
+      "question": "Who won the 2018 FIFA World Cup?",
+      "in_scope": false,
+      "slice": "general-knowledge",
+      "expected_source": null,
+      "top_score": 0.5447941422462463,
+      "hit_at_1": null,
+      "hit_at_5": null,
+      "fact_hit_at_1": null,
+      "fact_hit_at_5": null,
+      "chunks": [
+        {
+          "source": "listing-rules-and-prohibited-items.md",
+          "score": 0.5447941422462463,
+          "approx_tokens": 664,
+          "text_sha1": "ebef7ce4065eaaa990a9a0991d3401640e915af4",
+          "excerpt": "# Kestrel Market: Listing Rules and Prohibited Items Every listing on Kestrel Market represents the platform to a buyer,",
+          "has_fact": null
+        },
+        {
+          "source": "shipping-and-delivery-slas.md",
+          "score": 0.5381418764591217,
+          "approx_tokens": 704,
+          "text_sha1": "f433c7133e16df631002fae5bbdfeca7e3f52eea",
+          "excerpt": "# Kestrel Market: Shipping and Delivery SLAs Buyers choose Kestrel Market because they trust orders will arrive when pro",
+          "has_fact": null
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.5357335805892944,
+          "approx_tokens": 700,
+          "text_sha1": "c9ab780cbb38fcc81d97fdc7d38bfac1fe828bac",
+          "excerpt": "# Kestrel Market: Disputes A dispute is opened when a buyer and seller cannot agree on the outcome of an order, or when ",
+          "has_fact": null
+        }
+      ]
+    },
+    {
+      "id": "out-04",
+      "question": "What are Amazon FBA's fulfillment fees for a small standard item?",
+      "in_scope": false,
+      "slice": "other-platform",
+      "expected_source": null,
+      "top_score": 0.7025555372238159,
+      "hit_at_1": null,
+      "hit_at_5": null,
+      "fact_hit_at_1": null,
+      "fact_hit_at_5": null,
+      "chunks": [
+        {
+          "source": "fees.md",
+          "score": 0.7025555372238159,
+          "approx_tokens": 577,
+          "text_sha1": "5119da967478c47f67404338a4c1cad48566258c",
+          "excerpt": "# Kestrel Market: Fees This policy explains every fee Kestrel Market charges sellers. All fees are deducted automaticall",
+          "has_fact": null
+        }
+      ]
+    },
+    {
+      "id": "out-05",
+      "question": "How do I renew a listing on Etsy?",
+      "in_scope": false,
+      "slice": "other-platform",
+      "expected_source": null,
+      "top_score": 0.6721658110618591,
+      "hit_at_1": null,
+      "hit_at_5": null,
+      "fact_hit_at_1": null,
+      "fact_hit_at_5": null,
+      "chunks": [
+        {
+          "source": "listing-rules-and-prohibited-items.md",
+          "score": 0.6721658110618591,
+          "approx_tokens": 664,
+          "text_sha1": "ebef7ce4065eaaa990a9a0991d3401640e915af4",
+          "excerpt": "# Kestrel Market: Listing Rules and Prohibited Items Every listing on Kestrel Market represents the platform to a buyer,",
+          "has_fact": null
+        },
+        {
+          "source": "fees.md",
+          "score": 0.6270733773708344,
+          "approx_tokens": 577,
+          "text_sha1": "5119da967478c47f67404338a4c1cad48566258c",
+          "excerpt": "# Kestrel Market: Fees This policy explains every fee Kestrel Market charges sellers. All fees are deducted automaticall",
+          "has_fact": null
+        }
+      ]
+    },
+    {
+      "id": "out-06",
+      "question": "What is eBay's Top Rated Seller program?",
+      "in_scope": false,
+      "slice": "other-platform",
+      "expected_source": null,
+      "top_score": 0.6431851387023926,
+      "hit_at_1": null,
+      "hit_at_5": null,
+      "fact_hit_at_1": null,
+      "fact_hit_at_5": null,
+      "chunks": [
+        {
+          "source": "account-health.md",
+          "score": 0.6431851387023926,
+          "approx_tokens": 625,
+          "text_sha1": "37242f5b306106b43525d83c89bb9528f7fb0ec6",
+          "excerpt": "# Kestrel Market: Account Health Account Health is Kestrel Market's single score summarizing how reliably a seller is fu",
+          "has_fact": null
+        },
+        {
+          "source": "fees.md",
+          "score": 0.6412549316883087,
+          "approx_tokens": 577,
+          "text_sha1": "5119da967478c47f67404338a4c1cad48566258c",
+          "excerpt": "# Kestrel Market: Fees This policy explains every fee Kestrel Market charges sellers. All fees are deducted automaticall",
+          "has_fact": null
+        },
+        {
+          "source": "listing-rules-and-prohibited-items.md",
+          "score": 0.6345999538898468,
+          "approx_tokens": 664,
+          "text_sha1": "ebef7ce4065eaaa990a9a0991d3401640e915af4",
+          "excerpt": "# Kestrel Market: Listing Rules and Prohibited Items Every listing on Kestrel Market represents the platform to a buyer,",
+          "has_fact": null
+        }
+      ]
+    },
+    {
+      "id": "out-07",
+      "question": "purple monkey dishwasher refund velocity",
+      "in_scope": false,
+      "slice": "nonsense",
+      "expected_source": null,
+      "top_score": 0.6301366090774536,
+      "hit_at_1": null,
+      "hit_at_5": null,
+      "fact_hit_at_1": null,
+      "fact_hit_at_5": null,
+      "chunks": [
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.6301366090774536,
+          "approx_tokens": 745,
+          "text_sha1": "03379eb02980d6b1a4fa0bdf6be89d2894403eef",
+          "excerpt": "# Kestrel Market: Returns and Refunds Policy Kestrel Market wants buyers to feel confident purchasing from any seller on",
+          "has_fact": null
+        },
+        {
+          "source": "fees.md",
+          "score": 0.6281171441078186,
+          "approx_tokens": 577,
+          "text_sha1": "5119da967478c47f67404338a4c1cad48566258c",
+          "excerpt": "# Kestrel Market: Fees This policy explains every fee Kestrel Market charges sellers. All fees are deducted automaticall",
+          "has_fact": null
+        },
+        {
+          "source": "account-health.md",
+          "score": 0.6184025704860687,
+          "approx_tokens": 625,
+          "text_sha1": "37242f5b306106b43525d83c89bb9528f7fb0ec6",
+          "excerpt": "# Kestrel Market: Account Health Account Health is Kestrel Market's single score summarizing how reliably a seller is fu",
+          "has_fact": null
+        }
+      ]
+    },
+    {
+      "id": "out-08",
+      "question": "asdf qwer zxcv",
+      "in_scope": false,
+      "slice": "nonsense",
+      "expected_source": null,
+      "top_score": 0.5498365163803101,
+      "hit_at_1": null,
+      "hit_at_5": null,
+      "fact_hit_at_1": null,
+      "fact_hit_at_5": null,
+      "chunks": [
+        {
+          "source": "fees.md",
+          "score": 0.5498365163803101,
+          "approx_tokens": 577,
+          "text_sha1": "5119da967478c47f67404338a4c1cad48566258c",
+          "excerpt": "# Kestrel Market: Fees This policy explains every fee Kestrel Market charges sellers. All fees are deducted automaticall",
+          "has_fact": null
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.5408029556274414,
+          "approx_tokens": 700,
+          "text_sha1": "c9ab780cbb38fcc81d97fdc7d38bfac1fe828bac",
+          "excerpt": "# Kestrel Market: Disputes A dispute is opened when a buyer and seller cannot agree on the outcome of an order, or when ",
+          "has_fact": null
+        }
+      ]
+    },
+    {
+      "id": "out-09",
+      "question": "How do I turn on two-factor authentication for my seller account?",
+      "in_scope": false,
+      "slice": "lookalike",
+      "expected_source": null,
+      "top_score": 0.6386235952377319,
+      "hit_at_1": null,
+      "hit_at_5": null,
+      "fact_hit_at_1": null,
+      "fact_hit_at_5": null,
+      "chunks": [
+        {
+          "source": "fees.md",
+          "score": 0.6386235952377319,
+          "approx_tokens": 577,
+          "text_sha1": "5119da967478c47f67404338a4c1cad48566258c",
+          "excerpt": "# Kestrel Market: Fees This policy explains every fee Kestrel Market charges sellers. All fees are deducted automaticall",
+          "has_fact": null
+        },
+        {
+          "source": "returns-and-refunds.md",
+          "score": 0.6176478862762451,
+          "approx_tokens": 745,
+          "text_sha1": "03379eb02980d6b1a4fa0bdf6be89d2894403eef",
+          "excerpt": "# Kestrel Market: Returns and Refunds Policy Kestrel Market wants buyers to feel confident purchasing from any seller on",
+          "has_fact": null
+        },
+        {
+          "source": "listing-rules-and-prohibited-items.md",
+          "score": 0.6140872240066528,
+          "approx_tokens": 664,
+          "text_sha1": "ebef7ce4065eaaa990a9a0991d3401640e915af4",
+          "excerpt": "# Kestrel Market: Listing Rules and Prohibited Items Every listing on Kestrel Market represents the platform to a buyer,",
+          "has_fact": null
+        },
+        {
+          "source": "account-health.md",
+          "score": 0.6051394641399384,
+          "approx_tokens": 625,
+          "text_sha1": "37242f5b306106b43525d83c89bb9528f7fb0ec6",
+          "excerpt": "# Kestrel Market: Account Health Account Health is Kestrel Market's single score summarizing how reliably a seller is fu",
+          "has_fact": null
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.5995914936065674,
+          "approx_tokens": 700,
+          "text_sha1": "c9ab780cbb38fcc81d97fdc7d38bfac1fe828bac",
+          "excerpt": "# Kestrel Market: Disputes A dispute is opened when a buyer and seller cannot agree on the outcome of an order, or when ",
+          "has_fact": null
+        }
+      ]
+    },
+    {
+      "id": "out-10",
+      "question": "Does Kestrel Market collect sales tax on my behalf in every state?",
+      "in_scope": false,
+      "slice": "lookalike",
+      "expected_source": null,
+      "top_score": 0.7461827397346497,
+      "hit_at_1": null,
+      "hit_at_5": null,
+      "fact_hit_at_1": null,
+      "fact_hit_at_5": null,
+      "chunks": [
+        {
+          "source": "fees.md",
+          "score": 0.7461827397346497,
+          "approx_tokens": 577,
+          "text_sha1": "5119da967478c47f67404338a4c1cad48566258c",
+          "excerpt": "# Kestrel Market: Fees This policy explains every fee Kestrel Market charges sellers. All fees are deducted automaticall",
+          "has_fact": null
+        },
+        {
+          "source": "disputes.md",
+          "score": 0.7324203848838806,
+          "approx_tokens": 700,
+          "text_sha1": "c9ab780cbb38fcc81d97fdc7d38bfac1fe828bac",
+          "excerpt": "# Kestrel Market: Disputes A dispute is opened when a buyer and seller cannot agree on the outcome of an order, or when ",
+          "has_fact": null
+        },
+        {
+          "source": "listing-rules-and-prohibited-items.md",
+          "score": 0.7269235849380493,
+          "approx_tokens": 664,
+          "text_sha1": "ebef7ce4065eaaa990a9a0991d3401640e915af4",
+          "excerpt": "# Kestrel Market: Listing Rules and Prohibited Items Every listing on Kestrel Market represents the platform to a buyer,",
+          "has_fact": null
+        }
+      ]
+    }
+  ]
+}
