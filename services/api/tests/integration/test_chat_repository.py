@@ -7,6 +7,7 @@ from copilot_api.config import get_settings
 from copilot_api.dynamo.chat_repository import (
     SESSION_TTL_DAYS,
     ChatRepository,
+    IdempotencyKeyReusedError,
     SessionNotFoundError,
 )
 from copilot_api.dynamo.client import create_dynamodb_client
@@ -195,3 +196,45 @@ async def test_list_sessions_for_seller_filters_out_already_expired_sessions(
         assert live_session.session_id in session_ids
     finally:
         client.close()
+
+
+async def test_store_question_once_writes_one_user_message_per_key(repo: ChatRepository) -> None:
+    session = await repo.create_session("seller-idem", title="t")
+
+    first = await repo.store_question_once(session.session_id, "key-1", "How long?")
+    repeat = await repo.store_question_once(session.session_id, "key-1", "How long?")
+
+    assert (first.replayed, first.existing_answer) == (False, None)
+    assert (repeat.replayed, repeat.existing_answer) == (True, None)
+    page = await repo.list_messages(session.session_id)
+    assert [(m.role, m.content) for m in page.items] == [("user", "How long?")]
+
+
+async def test_store_answer_once_links_one_answer_and_replays_it(repo: ChatRepository) -> None:
+    session = await repo.create_session("seller-idem-2", title="t")
+    await repo.store_question_once(session.session_id, "key-1", "Q?")
+
+    answer = await repo.store_answer_once(session.session_id, "key-1", "A [1].")
+    racing = await repo.store_answer_once(session.session_id, "key-1", "A different answer.")
+    replay = await repo.store_question_once(session.session_id, "key-1", "Q?")
+
+    assert racing.message_id == answer.message_id  # second writer gets the first answer back
+    assert replay.existing_answer is not None
+    assert replay.existing_answer.message_id == answer.message_id
+    page = await repo.list_messages(session.session_id)
+    assert [(m.role, m.content) for m in page.items] == [("user", "Q?"), ("assistant", "A [1].")]
+
+
+async def test_store_question_once_rejects_reused_key_with_other_content(
+    repo: ChatRepository,
+) -> None:
+    session = await repo.create_session("seller-idem-3", title="t")
+    await repo.store_question_once(session.session_id, "key-1", "Q?")
+
+    with pytest.raises(IdempotencyKeyReusedError):
+        await repo.store_question_once(session.session_id, "key-1", "Other?")
+
+
+async def test_store_question_once_on_missing_session_raises(repo: ChatRepository) -> None:
+    with pytest.raises(SessionNotFoundError):
+        await repo.store_question_once("01NOSUCHSESSION0000000000", "key-1", "Q?")

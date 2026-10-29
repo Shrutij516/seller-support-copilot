@@ -65,6 +65,10 @@ export function ChatThread({ sessionId }: { sessionId: string }) {
   const send = useSendChatMessage(sessionId);
   const [draft, setDraft] = useState("");
   const [announcement, setAnnouncement] = useState("");
+  // The question currently in flight or last failed, with its idempotency key. Retrying the
+  // same text reuses the key, so the server stores the question once (and returns an answer
+  // it already has); any other text gets a fresh key.
+  const [attempt, setAttempt] = useState<{ content: string; clientMessageId: string } | null>(null);
   const composerId = useId();
   const hintId = useId();
 
@@ -75,12 +79,19 @@ export function ChatThread({ sessionId }: { sessionId: string }) {
 
   const submit = () => {
     if (!canSend) return;
-    send.mutate(trimmed, {
-      onSuccess: (answer) => {
-        setDraft("");
-        setAnnouncement(`Assistant: ${answer.content}`);
+    const clientMessageId =
+      attempt && attempt.content === trimmed ? attempt.clientMessageId : crypto.randomUUID();
+    setAttempt({ content: trimmed, clientMessageId });
+    send.mutate(
+      { content: trimmed, clientMessageId },
+      {
+        onSuccess: (answer) => {
+          setDraft("");
+          setAttempt(null);
+          setAnnouncement(`Assistant: ${answer.content}`);
+        },
       },
-    });
+    );
   };
 
   const handleSubmit = (e: FormEvent) => {

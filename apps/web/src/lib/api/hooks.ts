@@ -151,24 +151,34 @@ export const CHAT_MESSAGE_MAX_CHARS = 2000;
 
 /**
  * Send a message and get the grounded answer (POST .../messages returns the assistant
- * message). The user's message is shown immediately as an optimistic entry; the answer is
+ * message). `clientMessageId` is the idempotency key for this question: reuse it when
+ * retrying the same question so the server stores it once and, if it already answered,
+ * returns that answer instead of calling the model again. The user's message is shown immediately as an optimistic entry; the answer is
  * appended on success. Either way the thread is refetched afterwards, because the server is
  * the record: on a 503 it has still stored the question (see the API route), so the refetch
  * shows it even though no answer came back.
  */
+export interface SendChatMessage {
+  content: string;
+  clientMessageId: string;
+}
+
 export function useSendChatMessage(sessionId: string) {
   const queryClient = useQueryClient();
   const key = ["chat-messages", sessionId];
   return useMutation({
-    mutationFn: async (content: string) => {
+    mutationFn: async ({ content, clientMessageId }: SendChatMessage) => {
       const { data, error, response } = await getApiClient().POST(
         "/v1/chat/sessions/{session_id}/messages",
-        { params: { path: { session_id: sessionId } }, body: { content } },
+        {
+          params: { path: { session_id: sessionId } },
+          body: { content, client_message_id: clientMessageId },
+        },
       );
       if (error) throw new ApiError(error, response.status);
       return data;
     },
-    onMutate: async (content) => {
+    onMutate: async ({ content }) => {
       await queryClient.cancelQueries({ queryKey: key });
       const previous = queryClient.getQueryData<ChatMessageListResponse>(key);
       const optimistic: ChatMessageResponse = {

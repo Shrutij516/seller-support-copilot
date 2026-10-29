@@ -139,6 +139,10 @@ export interface paths {
          * @description Store the seller's question, answer it from the policy knowledge base, store and
          *     return the answer. The question is stored even if answering fails (a 503 leaves the user
          *     message in place and no assistant message), so the thread shows what was asked.
+         *
+         *     Idempotent per (session, client_message_id): a retry with the same id never stores the
+         *     question again; if an answer was already recorded for it, that answer is returned without
+         *     calling the model (DECISIONS.md, "Idempotent message send").
          */
         post: operations["post_chat_message_v1_chat_sessions__session_id__messages_post"];
         delete?: never;
@@ -285,6 +289,11 @@ export interface components {
         CaseType: "refund_request" | "escalation" | "other";
         /** ChatMessageCreateBody */
         ChatMessageCreateBody: {
+            /**
+             * Client Message Id
+             * Format: uuid
+             */
+            client_message_id: string;
             /** Content */
             content: string;
         };

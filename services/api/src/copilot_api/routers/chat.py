@@ -8,10 +8,10 @@ from copilot_api.config import Settings, get_settings
 from copilot_api.dynamo.chat_repository import (
     ChatMessage,
     ChatRepository,
-    Citation,
+    IdempotencyKeyReusedError,
     SessionNotFoundError,
 )
-from copilot_api.errors import not_found, service_unavailable
+from copilot_api.errors import conflict, not_found, service_unavailable
 from copilot_api.rag.pipeline import answer_question
 from copilot_api.rag.types import Generator, RagBackendError, Retriever
 from copilot_api.schemas import (
@@ -56,20 +56,6 @@ def _message_response(message: ChatMessage) -> ChatMessageResponse:
             for c in message.citations
         ],
     )
-
-
-async def _append(
-    repo: ChatRepository,
-    session_id: str,
-    role: str,
-    content: str,
-    citations: tuple[Citation, ...] = (),
-) -> ChatMessage:
-    try:
-        return await repo.append_message(session_id, role, content, citations=citations)
-    except SessionNotFoundError as exc:
-        # Expired between the ownership check and this write: same answer as never existing.
-        raise not_found("chat session not found") from exc
 
 
 @router.post("/sessions", response_model=ChatSessionResponse, status_code=201)
@@ -142,12 +128,25 @@ async def post_chat_message(
     """Store the seller's question, answer it from the policy knowledge base, store and
     return the answer. The question is stored even if answering fails (a 503 leaves the user
     message in place and no assistant message), so the thread shows what was asked.
+
+    Idempotent per (session, client_message_id): a retry with the same id never stores the
+    question again; if an answer was already recorded for it, that answer is returned without
+    calling the model (DECISIONS.md, "Idempotent message send").
     """
     owned_session = await repo.get_session(session_id)
     if owned_session is None or owned_session.seller_id != str(seller_id):
         raise not_found("chat session not found")
 
-    await _append(repo, session_id, "user", body.content)
+    client_message_id = str(body.client_message_id)
+    try:
+        stored = await repo.store_question_once(session_id, client_message_id, body.content)
+    except SessionNotFoundError as exc:
+        # Expired between the ownership check and this write: same answer as never existing.
+        raise not_found("chat session not found") from exc
+    except IdempotencyKeyReusedError as exc:
+        raise conflict("client_message_id was already used for a different message") from exc
+    if stored.existing_answer is not None:
+        return _message_response(stored.existing_answer)
 
     try:
         answer = await answer_question(body.content, retriever, generator, settings.rag_min_score)
@@ -161,7 +160,10 @@ async def post_chat_message(
             "the assistant is temporarily unavailable; please try again shortly"
         ) from exc
 
-    assistant = await _append(
-        repo, session_id, "assistant", answer.text, citations=answer.citations
-    )
+    try:
+        assistant = await repo.store_answer_once(
+            session_id, client_message_id, answer.text, citations=answer.citations
+        )
+    except SessionNotFoundError as exc:
+        raise not_found("chat session not found") from exc
     return _message_response(assistant)

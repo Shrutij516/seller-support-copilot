@@ -321,8 +321,28 @@ build; don't let it drift from the code.
   - **Accessibility:** a dedicated `aria-live` region announces each new answer once, the textarea is labeled, Enter sends and Shift+Enter adds a newline. Nothing is sent mid-IME composition.
 - Why we chose it: Answers are short and fast. The live smoke run measured retrieve at 440 ms and Converse at 1,037 ms, about 1.5 s end to end for a full grounded answer. A spinner for about 1.5 s is acceptable, and request/response keeps every existing piece unchanged: the generated client, problem+json errors, the static-export frontend, the API's synchronous route and its tests, and storing the whole answer with its citations in one write. Citations are filtered from the complete answer text (only `[n]` actually cited), which is simplest when the whole answer is in hand.
 - Rejected alternative: Server-Sent Events streaming (Converse's `ConverseStream`). Text would appear incrementally, but it needs a streaming endpoint and client, a different error model mid-stream (a 503 after half an answer), citation filtering only at the end, a second storage path for partial answers, and proxy and CloudFront configuration that buffers or times out streams. That's a lot of moving parts to save about 1 second.
-- Tradeoff we accept: A spinner instead of incremental text. If answers get longer, or latency grows (bigger parents, larger models), the wait becomes noticeable. Also, on a 503 the API has already stored the question, so pressing Retry stores it a second time: the thread can show the same question twice, once without an answer. That's honest about what the server recorded, and acceptable while 503s are rare.
-- Revisit if: p95 end-to-end latency rises past about 3 s, answers routinely run several paragraphs, or the 503 duplicate-question pattern shows up in real use (then make the retry idempotent server-side).
+- Tradeoff we accept: A spinner instead of incremental text. If answers get longer, or latency grows (bigger parents, larger models), the wait becomes noticeable. Retrying after a 503 is idempotent: see "Idempotent message send".
+- Revisit if: p95 end-to-end latency rises past about 3 s, answers routinely run several paragraphs.
+
+## Idempotent message send
+
+- Status: In use (branch `fix/chat-idempotent-send`). `POST /v1/chat/sessions/{id}/messages` requires `client_message_id` (UUID). Implemented in `ChatRepository.store_question_once` and `store_answer_once`; the web client is `ChatThread` / `useSendChatMessage`.
+- What it does: The client generates one `client_message_id` per question and reuses it when retrying that question. On the server, per (session, `client_message_id`):
+  - **First send:** a single DynamoDB `TransactWriteItems` writes three things together: a `REQ#<client_message_id>` idempotency item (with `ConditionExpression: attribute_not_exists(PK)`, the user message's id, and a SHA-256 of the content), the user message itself, and the session's `last_message_at` / TTL update.
+  - **Repeat send:** the condition fails, the whole transaction is cancelled, and nothing is written. The repository then reads the `REQ#` item:
+    - **An answer is already linked:** it's returned with no retrieval or model call.
+    - **No answer yet** (the first attempt hit a 503): retrieval and generation run again, without storing a second question.
+    - **The same id arrives with different content:** 409, since that's a client bug, not a retry.
+  - **Recording the answer:** a second transaction puts the assistant message and links it from `REQ#` with the condition `attribute_not_exists(assistant_message_id)`. If two retries race, only the first answer is stored, and the second request gets that one back.
+  - **Storage details:** `REQ#` items live in the session's partition (so ids are scoped per session), carry the same sliding TTL as the session, and sit outside the `MSG#` prefix, so message listing never sees them.
+- Why we chose it: The API stores the question before calling Bedrock, deliberately, so a 503 still leaves a record of what was asked. Without a key, Retry stored it again (Incidents, "Retry after a 503 duplicates the user's question"). A conditional put inside the same transaction as the message is atomic: there's never a stored question without its idempotency item, and two concurrent sends with the same id can't both win, because DynamoDB evaluates the condition and the writes as one unit. Linking the answer from the same item lets a retried success return the original answer, so a client retry can't double the Bedrock cost.
+- Rejected alternative: Storing the question only after a successful answer. That's no duplicates for free, but a 503 would leave no trace of what the seller asked, which loses the "the thread shows what was asked" property the route was designed around. Also rejected: a separate "regenerate" endpoint for retries. It's an explicit verb, but the client then has to know whether the first attempt stored anything (unknowable after a timeout), and it adds an endpoint, a contract and tests for a case the key handles transparently. Also rejected: deduplicating by content. Two genuinely separate identical questions are legitimate, and a client-chosen id makes intent explicit.
+- Tradeoff we accept:
+  - **A required field** in the request contract: clients must generate and keep a UUID per question, and a missing or invalid id is a 422.
+  - **More writes:** one extra item per question, and a conditional write plus a follow-up read on replays.
+  - **Different transaction shapes:** sending is two transactions (question, then answer) instead of two plain appends, and replay handling reads `CancellationReasons`.
+  - **Wasted generation in a race:** if two retries run concurrently before either records an answer, both call the model and only the first answer is kept.
+- Revisit if: clients need cross-session or cross-device dedup (then the key needs a different scope), or replays become common enough that the follow-up read matters.
 
 ## Eval harness
 
@@ -747,7 +767,7 @@ build; don't let it drift from the code.
 - Symptom: In the web chat (merged in PR #8), if a send fails with 503 and the user presses Retry, the session ends up with the question stored twice: once with no answer, once answered.
 - Root cause: The API stores the user's message before calling Bedrock, deliberately, so the thread shows what was asked even when answering fails. Retry sends a new POST, which stores the question again. Nothing ties the retry to the first attempt.
 - Evidence: Found in review of phase 5a, and acknowledged in "Chat: request/response, not streaming" (tradeoff: "the thread can show the same question twice"). The web test "on 503 keeps the typed question and Retry resends it" asserts two POSTs with the same text, and its fake server stores the question on each.
-- Fix: **Pending**, on the next branch after PR #7 merges: an idempotency key (`client_message_id`) per question, reused on Retry, with the server storing the user message at most once per (session, key).
+- Fix: **Fixed** on branch `fix/chat-idempotent-send`. The request now carries a required `client_message_id`, generated per question by the web client and reused on Retry. The server stores the question at most once per (session, `client_message_id`), atomically, and returns an already-recorded answer without calling Bedrock. Tests cover the 503 retry, a retried success, distinct ids, cross-session ids, and missing or invalid ids. See "Idempotent message send".
 - Lesson: When the server persists before a fallible step, a client retry needs an idempotency key from day one. "Rare" isn't the same as "harmless".
 
 ## Known open issues
@@ -760,4 +780,7 @@ Not yet fixed. Each needs a decision or a change in its own reviewed phase.
 - **Stale README:** the README's general Results table and layout rows are out of date. They say 83 backend tests and 90% coverage, `evals` is "placeholder", and `infra` is "`BudgetStack` only". Only the RAG Results subsection is current.
 - **PR #3's description is wrong:** it still says "16/16 pass, 11 of them new"; the actual split was 10 new and 6 existing. PR #3 is merged; the correction of record is in Incidents, "PR #3's description misstates the Jest split".
 - **Nobody can log in yet:** the Cognito User Pool isn't deployed. The web app's sign-in (`oidc-client-ts`) and the API's JWT verification are implemented and tested against minted tokens, but no real user pool exists. The chat page, like every authenticated page, can't be used end to end until Cognito is provisioned and `COGNITO_*` / `NEXT_PUBLIC_*` are configured.
-- **Retry after 503 duplicates the question:** a known bug on `main` since PR #8. See Incidents, "Retry after a 503 duplicates the user's question". The fix (an idempotency key) goes on a fresh branch after PR #7 merges.
+
+## Resolved issues
+
+- **Retry after 503 duplicated the question:** fixed on branch `fix/chat-idempotent-send` by an idempotency key (`client_message_id`). See "Idempotent message send" and Incidents, "Retry after a 503 duplicates the user's question". It was a known open issue on `main` from PR #8 until this fix.
