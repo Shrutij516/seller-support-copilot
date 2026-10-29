@@ -18,6 +18,10 @@ services:
 
   dynamodb-local:
     image: amazon/dynamodb-local:latest
+    # Image default is "-jar DynamoDBLocal.jar -inMemory"; -sharedDb adds one database for all
+    # credentials. Without it, tables are per access key, so a table created with the make
+    # targets' dummy keys is invisible to an API using real `aws login` session keys (make dev-live).
+    command: ["-jar", "DynamoDBLocal.jar", "-inMemory", "-sharedDb"]
     ports:
       - "8001:8000"
     healthcheck:
