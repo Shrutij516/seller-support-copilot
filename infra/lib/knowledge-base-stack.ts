@@ -11,6 +11,14 @@ export const EMBEDDING_DIMENSIONS = 1024;
 export const CHUNK_MAX_TOKENS = 300;
 export const CHUNK_OVERLAP_PERCENT = 20;
 
+// Explicit (not CloudFormation-generated) names so the CloudFormation execution policy can
+// grant S3 Vectors access on these two exact ARNs (infra/bootstrap/cfn-exec-policy.json).
+// Both follow the S3 Vectors naming rules: 3-63 chars; bucket [a-z0-9-], index [a-z0-9.-];
+// start and end with a letter or number. Cost: these resources can't be replaced in place
+// (e.g. a new dimension needs a new index name), and one stack per account/region.
+export const VECTOR_BUCKET_NAME = "seller-copilot-kb-vectors";
+export const VECTOR_INDEX_NAME = "seller-policies";
+
 // Bedrock writes the chunk text and its own metadata blob into every vector. Both are too
 // large for S3 Vectors' filterable-metadata limit, so they must be declared non-filterable
 // when the index is created (it can't be changed afterwards).
@@ -50,11 +58,14 @@ export class KnowledgeBaseStack extends Stack {
       autoDeleteObjects: false,
     });
 
-    const vectorBucket = new CfnVectorBucket(this, "VectorBucket", {});
+    const vectorBucket = new CfnVectorBucket(this, "VectorBucket", {
+      vectorBucketName: VECTOR_BUCKET_NAME,
+    });
     vectorBucket.applyRemovalPolicy(RemovalPolicy.DESTROY);
 
     const vectorIndex = new CfnIndex(this, "VectorIndex", {
       vectorBucketArn: vectorBucket.attrVectorBucketArn,
+      indexName: VECTOR_INDEX_NAME,
       dimension: EMBEDDING_DIMENSIONS,
       distanceMetric: "cosine",
       dataType: "float32",
