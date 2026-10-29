@@ -199,7 +199,7 @@ build; don't let it drift from the code.
 ## Scoped CloudFormation execution policy instead of default AdministratorAccess bootstrap
 
 - Status: Written and tested (phase 4c-pre: `infra/bootstrap/cfn-exec-policy.json`, `infra/bootstrap/README.md`, `infra/test/cfn-exec-policy.test.ts`). Not yet created in IAM, and the account isn't bootstrapped. `make deploy-policy-create` and `make cdk-bootstrap` are run by hand after review.
-- What it does: `cdk bootstrap --cloudformation-execution-policies <copilot-cfn-exec ARN>` gives the bootstrap's CloudFormation execution role only the actions needed to create, update and delete the resource types in `KnowledgeBaseStack`. That's 67 actions, every one taken from those types' CloudFormation handler permission lists. Each is scoped to the stack's resources:
+- What it does: `cdk bootstrap --cloudformation-execution-policies <copilot-cfn-exec ARN>` gives the bootstrap's CloudFormation execution role only the actions needed to create, update and delete the resource types in `KnowledgeBaseStack`. That's 67 actions taken from those types' CloudFormation handler permission lists, plus `ssm:GetParameters` on the CDK bootstrap version parameter, which CloudFormation resolves with this role at change-set time (added after the first deploy failed; see Incidents). Each is scoped to the stack's resources:
   - IAM to `arn:aws:iam::<account>:role/KnowledgeBaseStack-*`, with `iam:PassRole` allowed only when passing to `bedrock.amazonaws.com`
   - S3 to `knowledgebasestack-*` buckets
   - S3 Vectors to the stack's one vector bucket and index, by exact ARN
@@ -369,3 +369,23 @@ build; don't let it drift from the code.
 - Evidence: The `npm ci` error output above. Rerunning with `npm ci --cache <scratch dir>` installed cleanly from the unchanged `package-lock.json`, then `npm run build`, `jest` (16/16 passed), and `cdk synth` with AWS credentials made unreachable (exit 0) all passed on the pushed commit, with a clean working tree.
 - Fix: Reinstalled `infra/node_modules` from the lockfile using a throwaway npm cache and reran the full infra CI sequence against the pushed commit. Left `~/.npm` untouched; fixing its ownership needs `sudo` and is the owner's call (`sudo chown -R "$(id -u):$(id -g)" ~/.npm`).
 - Lesson: Chain verification and commit with `&&` (or `set -e`), so a red check can't produce a commit. When a check fails for environmental reasons, verify the exact pushed commit before reporting it as green.
+
+### 2026-10-29: First KnowledgeBaseStack deploy denied ssm:GetParameters for the CloudFormation execution role
+
+- Symptom: `cdk deploy KnowledgeBaseStack` failed with `User: arn:aws:sts::<account>:assumed-role/cdk-hnb659fds-cfn-exec-role-<account>-us-east-1/AWSCloudFormation is not authorized to perform: ssm:GetParameters on resource: arn:aws:ssm:us-east-1:<account>:parameter/cdk-bootstrap/hnb659fds/version ... AccessDeniedException`. Earlier, `cdk diff` had printed "Could not create a change set" for the same reason. That went unnoticed because the diff still printed output. Nothing was created; the change set never got as far as executing.
+- Root cause: The scoped execution policy (phase 4c-pre) had no SSM permission. The synthesized template has a `BootstrapVersion` parameter of type `AWS::SSM::Parameter::Value<String>` (default `/cdk-bootstrap/hnb659fds/version`), used by CDK's `CheckBootstrapVersion` rule, and CloudFormation resolves SSM-typed parameters with the execution role when it creates the change set. The 4c-pre README claimed the opposite: that the deploy role resolves it, so the execution role needs nothing. That claim came from a comment on the deploy role's `ReadVersion` statement in CDK's bootstrap template. It wasn't checked against the synthesized template's parameters or CloudFormation's behavior, and the policy tests only looked at `Resources`, never `Parameters`.
+- Evidence: The AccessDenied text above names the execution role (`cdk-hnb659fds-cfn-exec-role-...`) as the principal and `ssm:GetParameters` on the version parameter as the denied action. `cdk.out/KnowledgeBaseStack.template.json` has `"Parameters": {"BootstrapVersion": {"Type": "AWS::SSM::Parameter::Value<String>", "Default": "/cdk-bootstrap/hnb659fds/version"}}`.
+- Fix: Added statement `ReadCdkBootstrapVersion` to `infra/bootstrap/cfn-exec-policy.json`: `ssm:GetParameters` only, on exactly `arn:aws:ssm:us-east-1:{{ACCOUNT_ID}}:parameter/cdk-bootstrap/hnb659fds/version`, with the us-east-1 `aws:RequestedRegion` condition. New tests:
+  - the statement exists with exactly that action and resource
+  - no `ssm:` action has any other resource
+  - every `AWS::SSM::Parameter::Value<...>` parameter in the synthesized stack is readable under the policy, so a future stack can't repeat this
+
+  Negative tests: removing the statement fails 3 tests; widening it to `parameter/*` fails 2. The bootstrap README's wrong claim is corrected. Applying the fix to the live policy (`make deploy-policy-update`) and redeploying are left to the account owner.
+- What each reviewer missed:
+  - **Claude Code (4c-pre):** said in its phase report and in `infra/bootstrap/README.md` that the execution role needs no SSM permission. It based that on CDK's bootstrap template, where the deploy role reads the version parameter, and never checked the synthesized `KnowledgeBaseStack` template. There, `BootstrapVersion` is SSM-typed and is resolved by the execution role.
+  - **Reviewer (the account owner and their review assistant):** read the `cdk diff` output, saw the SSM-typed `BootstrapVersion` parameter and the "Could not create a change set" line, and approved the deploy, calling that line harmless instead of running `cdk diff -v` to see the reason.
+- Process fix:
+  1. Any "permission X is not needed" claim must cite the synthesized template, not general docs or another template.
+  2. "Could not create a change set" in `cdk diff` blocks deploy approval until `cdk diff -v` shows the reason.
+- Lesson: Verify claims about who resolves what against the synthesized template, not against comments in someone else's template. Policy tests must cover everything CloudFormation evaluates with the role (`Parameters` and `Rules` too), not just `Resources`. Treat "Could not create a change set" from `cdk diff` as a signal to run `cdk diff -v` and read the reason, not as noise to deploy past.
+

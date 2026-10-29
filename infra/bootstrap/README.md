@@ -29,7 +29,11 @@ Why not `${aws:PrincipalAccount}`: IAM allows policy variables in `Resource` "on
 4. **Region lock:** every statement requires `aws:RequestedRegion = us-east-1`. It's a global condition key present on every request, including IAM, whose requests resolve to us-east-1: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_condition-keys.html#condition-keys-requestedregion
 5. **Pass-role restriction:** `iam:PassRole` is limited to `iam:PassedToService = bedrock.amazonaws.com`: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_iam-condition-keys.html#ck_PassedToService
 
-All 67 granted actions appear in those handler lists. Nothing outside them was added.
+All 67 resource actions appear in those handler lists. The one action not from a handler list is `ssm:GetParameters` on the CDK bootstrap version parameter (see "Template parameters" below), for 68 in total.
+
+## Template parameters
+
+CloudFormation resolves every `AWS::SSM::Parameter::Value<...>` template parameter **with this execution role** when it creates the change set. The synthesized `KnowledgeBaseStack` has one: `BootstrapVersion` (`Type: AWS::SSM::Parameter::Value<String>`, `Default: /cdk-bootstrap/hnb659fds/version`), which CDK's `CheckBootstrapVersion` rule reads. Statement `ReadCdkBootstrapVersion` grants `ssm:GetParameters` on exactly `arn:aws:ssm:us-east-1:{{ACCOUNT_ID}}:parameter/cdk-bootstrap/hnb659fds/version`, region-locked. The test `every SSM-typed template parameter is readable by the execution role` fails if a stack adds an SSM-typed parameter this policy can't read.
 
 ## `Resource: "*"` exceptions
 
@@ -69,5 +73,5 @@ Each of these is in a handler's list but serves a property or feature `Knowledge
 ## Known caveats
 
 - **`s3:GetBucketDefaultStorageClass`** is in the `AWS::S3::Bucket` read handler but not (yet) in the S3 Service Authorization Reference. It's kept so the read handler isn't denied, and is harmless if IAM never evaluates it.
-- **The CDK bootstrap version check** (`/cdk-bootstrap/hnb659fds/version` SSM parameter) is resolved during `CreateChangeSet` with the bootstrap **deploy** role's `ssm:GetParameters`, not this execution role's. See the `ReadVersion` statement on `DeploymentActionRole` in `node_modules/aws-cdk/lib/api/bootstrap/bootstrap-template.yaml`. So no SSM permission here.
+- **Correction (first deploy, 2026-10-29):** an earlier version of this README said the bootstrap version parameter was resolved with the deploy role's `ssm:GetParameters`, so this role needed no SSM permission. That was wrong. It rested on a comment in CDK's bootstrap template (the deploy role's `ReadVersion` statement), not on the synthesized template or CloudFormation's behavior. The first `cdk deploy` failed with AccessDenied on `ssm:GetParameters` for this execution role. See "Template parameters" above and the Incidents entry in DECISIONS.md.
 - **Unverified against a real deployment.** This policy hasn't been exercised yet, because no AWS calls were allowed in this phase. A missing permission shows up as AccessDenied on the first deploy, followed by an automatic rollback. The fix is a reviewed widening of this file, not falling back to `AdministratorAccess`.
