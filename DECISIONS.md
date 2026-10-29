@@ -770,6 +770,22 @@ build; don't let it drift from the code.
 - Fix: **Fixed** on branch `fix/chat-idempotent-send`. The request now carries a required `client_message_id`, generated per question by the web client and reused on Retry. The server stores the question at most once per (session, `client_message_id`), atomically, and returns an already-recorded answer without calling Bedrock. Tests cover the 503 retry, a retried success, distinct ids, cross-session ids, and missing or invalid ids. See "Idempotent message send".
 - Lesson: When the server persists before a fallible step, a client retry needs an idempotency key from day one. "Rare" isn't the same as "harmless".
 
+### 2026-10-29: Edit script trimmed a test file's ending with `rstrip` (near-miss)
+
+- Symptom: While adding a web test to `ChatThread.test.tsx`, Claude Code's edit script removed the file's final `});` with `s.rstrip("\n").rstrip("});").rstrip()` before appending the new test and a fresh closing `});`.
+- Root cause: `str.rstrip("});")` strips any trailing run of the characters `}`, `)` and `;`, not the literal string `});`. Whether it stopped at the right brace depended on what happened to precede it. With a slightly different file ending, it could have eaten the previous test's closing braces too.
+- Evidence: The edit script in the session. It happened to stop correctly (the previous test's `});` survived), confirmed by re-running web typecheck, lint and Vitest afterwards (8 `it(` blocks, 8 tests passing).
+- Fix: No damage. The change was verified by typecheck, lint and tests before committing.
+- Lesson: Edit with exact-match replacements (assert the old text occurs exactly once, then replace it), never with trailing-character trimming.
+
+### 2026-10-29: Local OpenAPI drift check can't validate uncommitted regenerated files
+
+- Symptom: On `fix/chat-idempotent-send`, `make openapi-check` couldn't be used before committing. It regenerates `openapi.json` and runs `git diff --exit-code` against the committed version, so a deliberately regenerated, not-yet-committed file always shows as "drift".
+- Root cause: The make target is designed for CI, where it runs on a pushed commit. Locally, mid-change, git is the wrong baseline.
+- Evidence: The regenerated `services/api/openapi.json` and `packages/api-client/src/generated.ts` were uncommitted working-tree changes at check time.
+- Fix: Substituted a byte-compare. Copy both working files, regenerate, then `cmp` each against its copy. Both were identical, meaning the committed artifacts match the code. CI's `openapi-check` and `api-client-check` then run against the pushed commit.
+- Lesson: Locally, a drift check before commit compares regenerate-vs-working-copy. CI's drift check on the pushed commit is the authority.
+
 ## Known open issues
 
 Not yet fixed. Each needs a decision or a change in its own reviewed phase.
