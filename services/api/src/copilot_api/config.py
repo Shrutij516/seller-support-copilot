@@ -29,8 +29,11 @@ class Settings(BaseSettings):
     bedrock_knowledge_base_id: str = ""
     bedrock_model_id: str = ""
     rag_top_k: int = 5
-    # Relevance floor for retrieved chunks; untuned placeholder until the eval set exists.
-    rag_min_score: float = 0.3
+    # Relevance floor for retrieved chunks: a cost guard that skips the model call when nothing
+    # is even loosely relevant. Chosen from evals/results/retrieval-2026-10-29-02.json: keeps
+    # 20/20 in-scope questions (lowest in-scope top score 0.584). Refusing off-topic questions
+    # is the prompt's job, not this floor's (DECISIONS.md, "Relevance floor is a cost guard").
+    rag_min_score: float = 0.55
     # Output cap per answer: the main per-request cost lever on the model side.
     rag_max_tokens: int = 1024
 

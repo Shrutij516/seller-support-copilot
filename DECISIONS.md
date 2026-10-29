@@ -222,7 +222,7 @@ build; don't let it drift from the code.
 
 ## Retrieval threshold from a labeled set, not a guess
 
-- Status: Tooling in place (phase 4c): `evals/retrieval_golden.jsonl`, `evals/calibrate_retrieval.py`, `make eval-retrieval`. The run and the choice of `rag_min_score` come next. The setting stays 0.3 until then.
+- Status: In use (phase 4c). Tooling: `evals/retrieval_golden.jsonl`, `evals/calibrate_retrieval.py`, `make eval-retrieval`. The value picked from it, 0.55, is recorded in "Relevance floor is a cost guard, not the refusal mechanism".
 - What it does: 20 in-scope questions, each labeled with its expected source doc and key fact, and 10 out-of-scope questions (general knowledge, other platforms, nonsense, seller-sounding look-alikes) go through the live KB with the same retriever the route uses. The script reports hit@1 and hit@5, the top-score distributions for both classes, and the highest threshold that keeps at least 95% of in-scope questions answerable, along with how many out-of-scope questions that threshold refuses. The threshold is computed on each question's top score, because the route refuses exactly when the top chunk is below `rag_min_score`.
 - Why we chose it: The relevance floor decides two failure modes at once: refusing questions the docs answer (too high) and sending off-topic context to the model (too low). The original 0.3 was a guess, and a live spot check already shows it's wrong. On-topic top scores were 0.64–0.69 and "What is the capital of France?" scored about 0.52, so 0.3 lets nearly everything through. A labeled set turns the choice into a measured tradeoff that can be re-run whenever the embedding model, chunking or corpus changes, and leaves a results file to point to.
 - Rejected alternative: Hand-picking a value from a few spot checks (e.g. "0.55 looks right"). Quick, but unrepeatable and blind to how close the classes are. Also rejected: relying on the model to say "I don't know" with no floor. That pays for a model call on every off-topic question and trusts the prompt alone to resist irrelevant context.
@@ -253,15 +253,34 @@ build; don't let it drift from the code.
 - Token accounting: `Generator.generate()` returns a `Generation(text, input_tokens, output_tokens)` per call. `answer_question` puts that call's usage on `RagAnswer`, and the eval and smoke script sum it. Rejected: the first version accumulated running totals on `BedrockConverseGenerator`. That generator is an app-wide singleton shared by concurrent requests, so the counters were shared mutable state that nothing in the request path should own. A unit test now asserts the generator has no such attributes.
 - Revisit if: The golden set grows past what a person can read through, or term-matching false failures become common.
 
-## Chunking anomaly: markdown tables vs FIXED_SIZE chunks (experiment in progress)
+## Policy docs avoid markdown tables (chunking experiment)
 
-- Status: Experiment running (phase 4c). Data change committed; the owner re-ingests and re-runs the evals.
+- Status: Decided (phase 4c). The experiment confirmed the prediction, and all three tables are now bullet lists. `services/api/tests/unit/test_policy_docs.py` fails if any file in `data/policies/` has a line starting with `|`.
 - What it does: Tests whether markdown tables stop Bedrock's FIXED_SIZE chunker (300 tokens, 20% overlap) from splitting a document. In the baseline retrieval run (`evals/results/retrieval-2026-10-29.json`), the three policy files that contain a markdown table came back as one chunk each: `account-health.md` about 662 tokens, `fees.md` about 608, `shipping-and-delivery-slas.md` about 718. The three without a table came back as 3 chunks each, at most about 310 tokens. In `fees.md` the only table (referral fee by category) is converted to a bullet list with the same rows and numbers; nothing else changes. `account-health.md` and `shipping-and-delivery-slas.md` keep their tables as the control group.
 - Prediction: after `make kb-upload` and `make kb-ingest`, `fees.md` goes from 1 chunk to about 2–3, and the two control files stay at 1. If `fees.md` stays at 1, tables aren't the cause and the hypothesis is rejected.
 - Why we chose it: A whole-file chunk dilutes the embedding (one vector for six topics) and sends ~700 tokens of mostly irrelevant context to the model. A one-file, one-variable change with a control group gives a causal answer, not just a correlation across six files.
 - Rejected alternative: Converting all three files at once (no control, so a re-ingest artifact couldn't be told apart from a real effect). Also rejected: switching chunking strategy (semantic or hierarchical) before knowing the cause. That changes many variables at once and costs a full re-ingest anyway.
 - Tradeoff we accept: The fees doc reads slightly worse as a list than as a table, and the result is from one KB snapshot with approximate token counts (words × 1.33).
-- Revisit if: The prediction fails (then look at Bedrock's parsing of these files directly), or it holds (then decide whether to convert the control files' tables too, or change the chunking strategy).
+- Result (`evals/results/retrieval-2026-10-29-02.json`, owner's run after re-upload and re-ingest): **prediction confirmed.**
+  - `fees.md`: 1 chunk (~608 tokens) → 3 chunks (max ~257).
+  - Controls unchanged: `account-health.md` 1 chunk (~662), `shipping-and-delivery-slas.md` 1 chunk (~718).
+  - Retrieval quality unchanged: hit@1 95%, hit@5 100%.
+- Decision: **Policy docs avoid markdown tables, because the KB's default parsing kept table-containing files as one oversized chunk.** The two control files' tables are converted to bullet lists with the same facts and numbers. Every golden key term and expected-fact number for their questions (in-11 to in-17) is still present verbatim.
+- Rejected alternative: switching the data source to hierarchical or semantic chunking. Either might handle tables, but it changes how every file is split at once and hides the cause. The measured problem was specific to tables, and the fix is a content rule we can test.
+- Tradeoff we accept: Authors must write tabular facts as lists, which reads a little worse for genuinely tabular data (fee schedules, score bands). The rule is enforced by a test, not a style note. If the corpus ever needs real tables, the chunking strategy decision comes back.
+- Revisit if: Tabular content becomes common enough that lists hurt readability, or Bedrock's default parser changes how it handles tables (re-run the experiment: one file, one control).
+
+## Relevance floor is a cost guard, not the refusal mechanism
+
+- Status: In use (phase 4c). `rag_min_score` default is 0.55 in `config.py` and `.env.example`, pinned by `tests/unit/test_rag_settings.py`.
+- What it does: Chunks below 0.55 are dropped. If none are left, the API returns the fixed refusal without calling the model. Above the floor, deciding whether the context actually answers the question is the model's job, through the system prompt rule "If the context does not answer the question that was asked, say so briefly. Do not offer related information instead, and do not cite anything."
+- Why we chose it:
+  - **Separate classes don't exist at the score level.** In `evals/results/retrieval-2026-10-29-02.json`, in-scope top scores run 0.584–0.787 and out-of-scope 0.511–0.754. The off-topic "Does Kestrel Market collect sales tax...?" (0.754) outscores 18 of 20 real questions. No threshold separates the classes, so the floor can't be the refusal mechanism.
+  - **The prompt rule already does the refusing.** With the floor at 0.3 the answer eval refused 8/10 out-of-scope questions with zero citations, and the remaining two were safe non-answers the pattern doesn't recognize.
+  - **0.55 costs no real question.** It keeps 20/20 in-scope (lowest in-scope top score 0.584, in-19) and still skips the model entirely for the 4 clearly unrelated questions (out-01, -02, -03, -08, top scores 0.511–0.533).
+- Rejected alternative: 0.614, the calibration script's "keep ≥95% in-scope" value. It refuses 1 of 20 real questions (in-19, the paraphrased refurbished-laptop photo question at 0.584), and in this sample refuses exactly the same 4 out-of-scope questions as 0.55. So it costs a real answer and buys nothing. Also rejected: keeping 0.3, which lets every question through, including keyboard mash.
+- Tradeoff we accept: Most off-topic questions (6/10 here) still reach the model and rely on the prompt to decline. At about 2,000 input and 70 output tokens per question (answers eval: 60,756 / 2,056 tokens over 30 questions), each costs roughly $0.003 at Haiku 4.5's Geo on-demand price. That's an estimate, and abuse at volume is a rate-limiting problem, not a threshold one. The margin under the weakest real question is thin (0.584 vs 0.55), and 20 author-written questions is a small sample.
+- Revisit if: Real seller questions arrive (re-run the calibration on them), the embedding model or chunking changes, or the answer eval's out-of-scope refusals regress (the prompt is doing the work, so that's where to look first).
 
 ## Eval harness
 
@@ -455,4 +474,12 @@ build; don't let it drift from the code.
   - **Reviewer (the account owner's review assistant):** accepted a paraphrased "model access ok" from the account owner as proof that Converse worked, rather than the exact command and its output. A paraphrase can't show which model id, region or profile was called, or whether the output came from the model at all.
 - Process fix: Proof that an AWS call works means the exact command and its exact output, pasted unedited. A summary of the result doesn't count.
 - Lesson: Bedrock model onboarding has steps outside IAM and outside "model access" (here, Anthropic's use-case form). Verify a model with a real minimal Converse call, and judge success only by its exact output.
+
+### 2026-10-29: Table-containing policy docs were ingested as single oversized chunks
+
+- Symptom: A live Retrieve returned one chunk from `shipping-and-delivery-slas.md` that was effectively the whole file (~700 tokens), even though the data source uses FIXED_SIZE chunking at 300 tokens with 20% overlap. The baseline retrieval eval then showed exactly the three files containing a markdown table (`account-health.md` ~662, `fees.md` ~608, `shipping-and-delivery-slas.md` ~718) as one chunk each, while the three files without tables were split into 3 chunks of about 300 or fewer.
+- Root cause: Markdown tables in the source docs. With the Knowledge Base's default parsing, a file containing a table wasn't split by the fixed-size chunker and was stored as one oversized chunk. This was established experimentally, not from documentation: converting only `fees.md`'s table to a list split that file normally while the two table-containing controls stayed whole. The exact mechanism inside Bedrock's parser isn't known.
+- Evidence: Chunk counts per source in `evals/results/retrieval-2026-10-29.json` (baseline) and `retrieval-2026-10-29-02.json`, the owner's run after converting only `fees.md` and re-ingesting: `fees.md` went from 1 chunk (~608) to 3 (max ~257); the controls stayed at 1 (~662, ~718); hit@1 and hit@5 were unchanged at 95% and 100%. Token counts are approximate (words × 1.33).
+- Fix: Converted the remaining two tables (`account-health.md` score bands, `shipping-and-delivery-slas.md` delivery SLAs) to bullet lists with identical facts and numbers. Added `tests/unit/test_policy_docs.py`, which fails on any line starting with `|` in `data/policies/`. Re-upload and re-ingest are the owner's step.
+- Lesson: "Chunked at 300 tokens" is a configuration, not an observation. Measure actual chunk sizes per source after every ingest (the retrieval eval now prints them). When a result looks wrong, change one variable on one file and keep a control group before reaching for a different chunking strategy.
 

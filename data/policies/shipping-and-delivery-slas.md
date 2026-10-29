@@ -22,11 +22,11 @@ handling-time warning in Account Health.
 
 Once an order ships, Kestrel Market tracks delivery against the speed the buyer paid for:
 
-| Shipping speed | Delivery SLA (business days from ship date) |
-| -------------- | ------------------------------------------- |
-| Standard       | 3-7 days                                    |
-| Expedited      | 2-3 days                                    |
-| Priority       | 1 day                                       |
+Delivery SLA by shipping speed, in business days from the ship date:
+
+- Standard: 3-7 days
+- Expedited: 2-3 days
+- Priority: 1 day
 
 These windows are estimates communicated to the buyer at checkout, generated from the
 carrier's own service commitment plus a 1-day buffer for regional variation. A shipment

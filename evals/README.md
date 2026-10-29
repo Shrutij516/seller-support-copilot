@@ -32,7 +32,7 @@ The run prints pass rates per slice, every failure (question, first 200 characte
 
 ## Results files
 
-Both scripts write to `results/` and never overwrite. The first run of a day is `<kind>-<date>.json`, and later runs that day are `<kind>-<date>-02.json`, `-03` and so on (exclusive create). The committed baseline is `retrieval-2026-10-29.json` and `answers-2026-10-29.json`. `answers-2026-10-29-02.json` is the rerun after the "do not offer related information" prompt rule: out-of-scope 8/10, up from 7/10.
+Both scripts write to `results/` and never overwrite. The first run of a day is `<kind>-<date>.json`, and later runs that day are `<kind>-<date>-02.json`, `-03` and so on (exclusive create). The committed baseline is `retrieval-2026-10-29.json` and `answers-2026-10-29.json`. `answers-2026-10-29-02.json` is the rerun after the "do not offer related information" prompt rule: out-of-scope 8/10, up from 7/10. `retrieval-2026-10-29-02.json` is the chunking experiment run, after converting only `fees.md`'s table: fees.md went from 1 chunk to 3, and the controls stayed at 1.
 
 ## Known limitations of this set
 
