@@ -948,6 +948,24 @@ build; don't let it drift from the code.
 - Fix: Not now (listed under Known open issues). Proposed: build the snippet from the matched child chunk, or from a window around the best-matching sentence in the parent.
 - Lesson: When the chunking strategy changes, re-check everything downstream of retrieval, including the citation UI.
 
+### 2026-11-07: README roadmap and tech stack drifted from reality (phases 4–6a)
+
+- Symptom: An outside reviewer read the README and concluded Phase 4 (Bedrock) hadn't started. In fact the Knowledge Base, the RAG answer path, citations, the refusal floor, idempotent chat and a verified live run were all on `main`.
+- Root cause: The README's Roadmap, Tech stack, Repository layout and Results sections weren't updated as phases 4–6a merged:
+  - **The Roadmap** had no status column, so planned and finished phases looked the same.
+  - **The Tech stack** listed planned items (Guardrails, tool calling, OpenTelemetry, ECS, CloudFront) alongside built ones without marking them.
+  - **The layout table** still said `evals` was a placeholder and `infra` was `BudgetStack` only.
+  - **The Results table** still said 83 backend and 50 frontend tests.
+
+  PRs updated DECISIONS.md but not the README.
+- Evidence: README on `main` at `f80eb95` versus the code. `infra/lib/` has three stacks, and `evals/results/` holds 8 results files. On 2026-11-07: pytest 75 unit + 103 integration, Vitest 61, Jest 51. Known open issues already listed "Stale README" without fixing it.
+- Fix: Branch `docs/readme-truth`:
+  - **Roadmap:** a Status column (Done / Partial / Not started), with one line of evidence per phase.
+  - **Tech stack:** planned items marked, and what's real added.
+  - **Layout rows** corrected.
+  - **Results:** counts from a fresh run of the CI commands.
+- Lesson: Every phase PR updates the README status row for its phase, in the same PR. A status that only lives in DECISIONS.md is invisible to a reader who starts at the README.
+
 ## Known open issues
 
 Not yet fixed. Each needs a decision or a change in its own reviewed phase.
@@ -955,7 +973,6 @@ Not yet fixed. Each needs a decision or a change in its own reviewed phase.
 - **Budget amount mismatch:** `infra/cdk.json` sets `budgetAmount` to 25, but the live AWS budget was created by hand at $15. The code and the account disagree. Either update `cdk.json` or deploy `BudgetStack` so they match.
 - **`npm audit` findings:** 8 vulnerabilities in `infra` dev dependencies, 1 of them critical. Not yet triaged: check whether any are reachable (they're dev and synth tooling, not deployed code) and upgrade or document each.
 - **Budget alert email:** budget alerts go to a different email address than the GitHub and Claude account. The owner needs to confirm whether that's intentional.
-- **Stale README:** the README's general Results table and layout rows are out of date. They say 83 backend tests and 90% coverage, `evals` is "placeholder", and `infra` is "`BudgetStack` only". Only the RAG Results subsection is current.
 - **PR #3's description is wrong:** it still says "16/16 pass, 11 of them new"; the actual split was 10 new and 6 existing. PR #3 is merged; the correction of record is in Incidents, "PR #3's description misstates the Jest split".
 - **Nobody can log in yet:** the Cognito User Pool isn't deployed. The web app's sign-in (`oidc-client-ts`) and the API's JWT verification are implemented and tested against minted tokens, but no real user pool exists. The chat page, like every authenticated page, can't be used end to end until Cognito is provisioned and `COGNITO_*` / `NEXT_PUBLIC_*` are configured.
 - **Concurrent identical retries can call the model twice:** if two requests with the same `client_message_id` both arrive before an answer is recorded, both run retrieval and generation. Only the first answer is stored, and both callers get it back. That costs one extra model call in a rare race. Accepted; see "Idempotent message send" (PR #9).
@@ -968,4 +985,5 @@ Not yet fixed. Each needs a decision or a change in its own reviewed phase.
 
 ## Resolved issues
 
+- **Stale README** (Results table, layout rows, roadmap and tech-stack status): fixed on branch `docs/readme-truth`. See Incidents, "README roadmap and tech stack drifted from reality".
 - **Retry after 503 duplicated the question:** fixed on branch `fix/chat-idempotent-send` by an idempotency key (`client_message_id`). See "Idempotent message send" and Incidents, "Retry after a 503 duplicates the user's question". It was a known open issue on `main` from PR #8 until this fix.
