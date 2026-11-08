@@ -63,7 +63,7 @@ flowchart TB
     GHA -.->|build and test on every push| FrontendHosting
 ```
 
-Current state: the browser talks to a FastAPI service backed by Postgres and DynamoDB (both run locally in Docker), and sign-in uses a real Amazon Cognito user pool.
+Current state: the web app and FastAPI service run locally, with Postgres and DynamoDB Local in Docker. Sign-in uses a real Amazon Cognito user pool (`AuthStack`), and chat answers come from a real Amazon Bedrock Knowledge Base (`KnowledgeBaseStack`) plus Claude Haiku 4.5. Nothing in the Frontend hosting, Backend (ECS), Observability or Guardrails/Tool calling boxes is built yet; see the Roadmap.
 
 ## Tech stack
 
@@ -71,28 +71,28 @@ Current state: the browser talks to a FastAPI service backed by Postgres and Dyn
 - **Backend**: FastAPI (Python 3.12), SQLAlchemy 2.0 + Alembic, Pydantic v2, pytest
 - **Data**: Postgres (relational: sellers, listings, orders, order_items, support_cases), DynamoDB (chat sessions/messages)
 - **Auth**: Amazon Cognito (Authorization Code + PKCE, JWT verified in-process against JWKS)
-- **AI**: Amazon Bedrock, Knowledge Bases, Guardrails, tool calling, structured outputs
-- **Observability**: OpenTelemetry, ADOT collector, CloudWatch, X-Ray
-- **Infra**: Docker Compose (local), AWS CDK (infra/, budget alert stack)
+- **AI**: Amazon Bedrock Knowledge Bases (S3 Vectors vector store, Titan Text Embeddings V2, hierarchical chunking); the API calls `Retrieve`, then `Converse` with Claude Haiku 4.5 (`us.` cross-region inference profile), with cited sources and a relevance floor that refuses without a model call. *Planned:* Guardrails, tool calling, structured outputs.
+- **Observability**: JSON structured logs with a per-request `X-Request-ID`. *Planned:* OpenTelemetry, ADOT collector, CloudWatch, X-Ray.
+- **Infra**: Docker Compose (local). AWS CDK with three stacks, never deployed by CI. **Deployed** (by hand, after `cdk diff` review): `KnowledgeBaseStack` (Bedrock KB, S3 docs bucket, S3 Vectors) and `AuthStack` (Cognito user pool, groups, hosted UI). Both deploy through a scoped CloudFormation execution policy (`infra/bootstrap/`) instead of the default AdministratorAccess. **Defined and tested but not deployed:** `BudgetStack` (cost alerts). The live $15 budget was created by hand in the AWS console, and the scoped execution policy doesn't cover `BudgetStack`. *Planned:* ECS Fargate for the API, S3 + CloudFront for the web app.
 - **CI/CD**: GitHub Actions (lint, typecheck, unit and integration tests, Docker build check, CDK synth on every push)
 
 See [DECISIONS.md](DECISIONS.md) for why each of these was chosen and what was rejected.
 
 ## Roadmap
 
-| Phase | Delivers |
-| --- | --- |
-| 0 | Monorepo scaffolding: repo layout, Docker Compose (Postgres, DynamoDB Local, API), GitHub Actions CI skeleton, CDK `BudgetStack` for cost alerts |
-| 1 | Data layer: Postgres schema (sellers, listings, orders, order_items, support_cases) via SQLAlchemy + Alembic, DynamoDB chat store, deterministic seed script, refund-request service with row-level locking |
-| 2 | API: Cognito JWT verification and role-based access, REST endpoints under `/v1`, RFC 9457 `application/problem+json` errors, OpenAPI contract exported and checked in CI, 85% coverage gate |
-| 3 | Frontend: Next.js static export, Cognito Authorization Code + PKCE login, generated TypeScript API client, seller and admin pages (orders, cases, chat, admin case queue), accessibility (Lighthouse 100/100 on the pages audited), Vitest test suite |
-| 4 | Bedrock: Knowledge Base retrieval over ingested policy docs, Guardrails, tool calling against seller/order data, structured outputs |
-| 5 | Eval harness: golden question set with expected facts, run on demand and gating CI on regression |
-| 6 | Observability: OpenTelemetry instrumentation in the API, ADOT sidecar forwarding traces to X-Ray and metrics/logs to CloudWatch |
-| 7 | End-to-end tests: Playwright driving the web app in a real browser |
-| 8 | Deploy: FastAPI on ECS Fargate behind an ALB, Next.js static export on S3 + CloudFront |
-| 9 | Results: measure and report p95 latency, cost per query, eval pass rate, and final test coverage against the deployed system |
-| Stretch | SQS for async policy-document ingestion, CDK for infra beyond the budget stack, a Lambda ingestion worker, rate limiting at the API Gateway/WAF layer. Redis was evaluated and cut (no measured hot path to justify it); see [DECISIONS.md](DECISIONS.md#cut-or-deferred). |
+| Phase | Delivers | Status |
+| --- | --- | --- |
+| 0 | Monorepo scaffolding: repo layout, Docker Compose (Postgres, DynamoDB Local, API), GitHub Actions CI skeleton, CDK `BudgetStack` for cost alerts | **Done**: `docker-compose.yml`, `.github/workflows/ci.yml`, `infra/lib/budget-stack.ts` (defined and tested; not deployed, see Cost and teardown) |
+| 1 | Data layer: Postgres schema (sellers, listings, orders, order_items, support_cases) via SQLAlchemy + Alembic, DynamoDB chat store, deterministic seed script, refund-request service with row-level locking | **Done**: `models.py`, 2 Alembic migrations (reversibility checked in CI), `dynamo/chat_repository.py`, `scripts/seed.py`, `services/refunds.py` (`SELECT … FOR UPDATE`, concurrency test) |
+| 2 | API: Cognito JWT verification and role-based access, REST endpoints under `/v1`, RFC 9457 `application/problem+json` errors, OpenAPI contract exported and checked in CI, 85% coverage gate | **Done**: `auth.py`, `routers/`, `errors.py`, OpenAPI drift check and 85% gate in CI |
+| 3 | Frontend: Next.js static export, Cognito Authorization Code + PKCE login, generated TypeScript API client, seller and admin pages (orders, cases, chat, admin case queue), accessibility (Lighthouse 100/100 on the pages audited), Vitest test suite | **Done**: `apps/web`, `packages/api-client`; Vitest in CI |
+| 4 | Bedrock: Knowledge Base retrieval over ingested policy docs, Guardrails, tool calling against seller/order data, structured outputs | **Partial.** Done: Knowledge Base on S3 Vectors (`KnowledgeBaseStack`), `Retrieve` + `Converse` answer path (`rag/`), citations, refusal floor, idempotent chat send, live local run verified 2026-10-29. Not done: Guardrails, tool calling, structured outputs |
+| 5 | Eval harness: golden question set with expected facts, run on demand and gating CI on regression | **Partial.** Done: golden set (`evals/retrieval_golden.jsonl`), retrieval and answer evals, latest results `evals/results/retrieval-2026-10-29-04.json` and `evals/results/answers-2026-10-29-04.json`. Not done: CI gating (evals call live Bedrock, so they run by hand) |
+| 6 | Observability: OpenTelemetry instrumentation in the API, ADOT sidecar forwarding traces to X-Ray and metrics/logs to CloudWatch | **Not started** (only JSON logs with request IDs exist) |
+| 7 | End-to-end tests: Playwright driving the web app in a real browser | **Not started** |
+| 8 | Deploy: FastAPI on ECS Fargate behind an ALB, Next.js static export on S3 + CloudFront | **Not started** (the app runs locally against AWS-managed Cognito and Bedrock) |
+| 9 | Results: measure and report p95 latency, cost per query, eval pass rate, and final test coverage against the deployed system | **Not started** (no deployed system; the Results section below is local and eval-run numbers) |
+| Stretch | SQS for async policy-document ingestion, a Lambda ingestion worker, rate limiting at the API Gateway/WAF layer. Redis was evaluated and cut (no measured hot path to justify it); see [DECISIONS.md](DECISIONS.md#cut-or-deferred). | **Not started.** CDK beyond the budget stack moved from Stretch to **Done**: `KnowledgeBaseStack` and `AuthStack` |
 
 ## Design decisions
 
@@ -103,12 +103,12 @@ Every non-obvious choice in this repo, what it does, why it was chosen over the 
 
 | Path | What |
 | --- | --- |
-| `apps/web` | Next.js frontend (static export for S3 + CloudFront) |
+| `apps/web` | Next.js frontend (static export; S3 + CloudFront hosting is planned, not built) |
 | `services/api` | FastAPI backend |
-| `services/ingest` | Document ingestion pipeline (placeholder) |
+| `services/ingest` | Placeholder. Ingestion is done by Bedrock Knowledge Bases: `make kb-upload` (S3 sync) and `make kb-ingest` (ingestion job) |
 | `packages/api-client` | TypeScript API client generated from `services/api/openapi.json` |
-| `infra` | AWS CDK app (currently `BudgetStack` only; not deployed by CI) |
-| `evals` | Evaluation datasets and scripts (placeholder) |
+| `infra` | AWS CDK app with three stacks. CI builds, tests and synths all three; deploying is a manual, reviewed step. `KnowledgeBaseStack` and `AuthStack` are deployed; `BudgetStack` isn't |
+| `evals` | Golden question set, retrieval calibration and answer eval scripts; results in `evals/results/` (run by hand against live Bedrock) |
 | `data` | Synthetic sample data, including the fictional marketplace's policy docs used by seeding and the Bedrock Knowledge Base |
 | `DECISIONS.md` | What each component does, why it was chosen, and what was rejected |
 
@@ -202,19 +202,21 @@ Other targets: `make down` (stop containers, keeps the Postgres volume), `make o
 
 - Local development costs nothing. `make down` stops containers; `docker compose down -v` also deletes the Postgres volume.
 - Nothing is deployed to AWS automatically. CI only runs `cdk synth`.
-- Deploy the budget first so spend is tracked from day one (default 25 USD/month, email alerts at 50%, 80%, 100% actual and 100% forecasted):
-  `cd infra && npx cdk deploy BudgetStack -c budgetEmail=you@example.com`
+- Budget: `BudgetStack` (default 25 USD/month, email alerts at 50%, 80%, 100% actual and 100% forecasted) is defined and tested but **not deployed**. The scoped CloudFormation execution policy grants no `budgets:` actions, so `cdk deploy BudgetStack` fails through this account's bootstrap. The live budget was created by hand in the AWS console at $15 (DECISIONS.md, Known open issues, "Budget amount mismatch").
 - Teardown: `cd infra && npx cdk destroy --all -c budgetEmail=you@example.com`. Bedrock, databases and Fargate are billable; destroy them when not in use.
 
 ## Results
 
+Measured locally on 2026-11-07 on `main` at `f80eb95`, with the same commands CI runs.
+
 | Metric | Value |
 | --- | --- |
-| Backend tests | 83 passing |
-| Backend coverage | 90% (CI gate: 85%) |
-| Frontend tests | 50 passing (Vitest) |
-| Accessibility | Lighthouse 100/100 on the audited pages |
-| CI | 4 jobs (api, web, infra, api-image), about 1 minute 15 seconds per run |
+| Backend tests | 178 passing: 75 unit + 103 integration (pytest; integration against Postgres 16 and DynamoDB Local) |
+| Backend coverage | 90% combined unit + integration (CI gate: 85%) |
+| Frontend tests | 61 passing in 12 files (Vitest) |
+| Infra tests | 51 passing in 4 suites (Jest: `AuthStack`, `KnowledgeBaseStack`, `BudgetStack`, CloudFormation execution policy) |
+| Accessibility | Lighthouse 100/100 on the pages audited in phase 3 (not re-run since) |
+| CI | 4 jobs (api, web, infra, api-image), 64–78 seconds for the last three runs on `main` |
 | Seed data | about 20 sellers, 60+ listings, 500 orders |
 
 ### RAG chat (retrieval and answers)
@@ -227,6 +229,6 @@ Measured on 2026-10-29 with live Amazon Bedrock calls: Knowledge Base retrieval 
 | Retrieval hit@1 / hit@5, fact-level (a retrieved chunk contains the expected fact) | 95% / 100% |
 | Answers, in-scope (expected fact stated and expected source cited) | 20/20 |
 | Answers, out-of-scope (refusal with zero citations) | 9/10. The one miss was a safe refusal worded outside the scorer's pattern. |
-| Cost per answer (estimate) | about $0.0022: Converse tokens at Bedrock on-demand Haiku 4.5 Geo pricing, excluding retrieval |
+| Cost per question (estimate) | about $0.0022 averaged over all 30 questions, or about $0.0026 per model call (4 of the 30 were refused without one): Converse tokens at Bedrock on-demand Haiku 4.5 Geo pricing, excluding retrieval |
 
 Caveats: 30 questions (20 in-scope, 10 out-of-scope), written by the same author as the policy documents, so expect these numbers to be optimistic compared with real seller questions. Scoring is deterministic (key-term and citation checks, no LLM judge). Methodology, scoring rules, known limitations and the raw results files are in [evals/README.md](evals/README.md).
