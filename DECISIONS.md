@@ -219,7 +219,7 @@ build; don't let it drift from the code.
 - Tradeoff we accept: Every new resource type, or new property that needs a new API call, makes the first deploy fail with AccessDenied and roll back until this policy is widened. The policy is derived from published handler lists, not observed from a real deploy, so the first deploy may still surface a missing permission. Also:
   - **Explicit vector names:** `KnowledgeBaseStack` names its vector bucket `seller-copilot-kb-vectors` and its index `seller-policies`. CloudFormation's generated vector names have no documented prefix, so without explicit names the policy could only cover every vector bucket in the region. With them, the S3 Vectors statements grant on those two exact ARNs. The cost: **one stack per account and region**, since vector bucket names are unique there and a second copy would collide. Also, these resources can't be replaced in place, so a new dimension or metric means a new index name plus a policy update in the same diff.
   - **No account wildcards:** every ARN's account field is an `{{ACCOUNT_ID}}` placeholder. IAM policy variables like `${aws:PrincipalAccount}` aren't allowed before the fifth colon of an ARN, which is where the account field is. `make deploy-policy-*` renders the caller's account into a temp file at create time, so the account ID is never committed. The cost: the committed JSON isn't directly usable with `aws iam create-policy`; it has to go through the Makefile, and the test checks it renders cleanly.
-  - **Shared execution role:** the bootstrap is per account and region, so `BudgetStack` can no longer be deployed through it (it was always a manual deploy).
+  - **Shared execution role:** the bootstrap is per account and region, so `BudgetStack` can't be deployed through it: the policy grants no `budgets:` actions. `BudgetStack` has never been deployed; the live budget was created by hand in the AWS console.
 - `AuthStack` (phase 6a): widened by 22 `cognito-idp:` actions taken from the four Cognito resource types' handler permissions. 20 are scoped to `arn:aws:cognito-idp:us-east-1:{{ACCOUNT_ID}}:userpool/*`; `CreateUserPool` and `DescribeUserPoolDomain` are on `*`, because the Service Authorization Reference lists no resource type for them. KMS, IAM role and CloudFront handler actions are excluded (no CMK, SMS role, Lambda trigger or custom domain). Tests cover the actions, their scope and `AuthStack`'s resource types. See `infra/bootstrap/README.md`, "AuthStack (Cognito)".
 - Future stacks: **any new stack, resource type or property that needs a new permission must widen this policy explicitly in a reviewed diff.** That means updating `cfn-exec-policy.json`, the README's sources and exceptions, and `REVIEWED_RESOURCE_TYPES` in the test, then running `make deploy-policy-update`. Falling back to `AdministratorAccess`, even "temporarily", isn't an option.
 - Revisit if: We add several stacks with very different needs (then one execution policy per bootstrap qualifier), or move deploys to CI (then the CI role's own permissions need the same review).
@@ -526,7 +526,7 @@ build; don't let it drift from the code.
 
 - **Redis**: Cut. No measured latency problem to justify a cache. Add back only if profiling shows a real hot path.
 - **SQS**: Stretch. Needed for async policy-document ingestion into the Bedrock Knowledge Base; ingestion runs synchronously until the core product works.
-- **CDK**: In use for `BudgetStack` and `KnowledgeBaseStack` (phase 4b). CI builds, unit-tests, and synths both with no AWS credentials; deploying stays a manual, reviewed step (`cdk deploy` is never run by CI or by an agent). Other infra is still deployed by hand until CDK earns its place there too.
+- **CDK**: In use for three stacks. CI builds, unit-tests and synths all of them with no AWS credentials; deploying stays a manual, reviewed step (`cdk deploy` is never run by CI or by an agent). **Deployed:** `KnowledgeBaseStack` (phase 4b) and `AuthStack` (phase 6a). **Defined but not deployed:** `BudgetStack`: the scoped execution policy doesn't cover it, and the live budget was created by hand in the console. Other infra is still created by hand until CDK earns its place there too.
 - **Lambda**: Not needed in core. Natural fit for the stretch SQS ingestion worker (bursty, event-triggered).
 - **Spring Boot**: Rejected. Common at Amazon, but my Java is coursework-only; FastAPI is the choice I can defend in depth.
 - **Rate limiting**: Deferred. No Redis (see above) to back a token bucket in the app itself, and it's the wrong layer for it anyway. Revisit with an API Gateway usage plan or WAF rate-based rule at deploy time, in front of the API rather than inside it.
@@ -965,6 +965,20 @@ build; don't let it drift from the code.
   - **Layout rows** corrected.
   - **Results:** counts from a fresh run of the CI commands.
 - Lesson: Every phase PR updates the README status row for its phase, in the same PR. A status that only lives in DECISIONS.md is invisible to a reader who starts at the README.
+
+### 2026-11-07: README rewrite stated `BudgetStack` was deployed (caught in review)
+
+- Symptom: The README truth pass (commit `d0e5f65`, PR #13) said all three CDK stacks were "deployed by hand after review", which includes `BudgetStack`. It isn't deployed.
+- Root cause: Wrote a single "deployed" claim for a group of stacks without checking each stack. The surrounding text was about deploy *process* (manual, reviewed, never CI), and that was stretched into deploy *state*. The repo already recorded the facts:
+  - **Known open issues, "Budget amount mismatch":** the live budget was created by hand at $15.
+  - **"Scoped CloudFormation execution policy":** `BudgetStack` can't deploy through the shared execution role.
+  - **`infra/bootstrap/cfn-exec-policy.json`:** contains no `budgets:` actions.
+- Evidence: The Tech stack "Infra" line at `d0e5f65` read "AWS CDK with three stacks, deployed by hand after review and never by CI: `BudgetStack` (cost alerts), `KnowledgeBaseStack` … and `AuthStack` …". The same pass left these misleading too:
+  - **The Cost and teardown section** still told readers to `cdk deploy BudgetStack`, which fails through the scoped bootstrap.
+  - **"Cut or deferred, CDK"** said CDK is "In use for `BudgetStack` and `KnowledgeBaseStack`".
+  - **The execution-policy decision** said `BudgetStack` "was always a manual deploy".
+- Fix: The Infra line now lists `KnowledgeBaseStack` and `AuthStack` as deployed and `BudgetStack` as defined and tested but not deployed. The phase 0 roadmap row, the `infra` layout row, Cost and teardown, "Cut or deferred, CDK" and the execution-policy decision now say the same. CloudFormation stacks weren't listed: no AWS calls were made.
+- Lesson: "Deployed" claims must match the CloudFormation stacks actually present in the account, stack by stack. Check against `aws cloudformation list-stacks` output, or an owner's record of it, not against the deploy process.
 
 ## Known open issues
 

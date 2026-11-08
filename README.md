@@ -73,7 +73,7 @@ Current state: the web app and FastAPI service run locally, with Postgres and Dy
 - **Auth**: Amazon Cognito (Authorization Code + PKCE, JWT verified in-process against JWKS)
 - **AI**: Amazon Bedrock Knowledge Bases (S3 Vectors vector store, Titan Text Embeddings V2, hierarchical chunking); the API calls `Retrieve`, then `Converse` with Claude Haiku 4.5 (`us.` cross-region inference profile), with cited sources and a relevance floor that refuses without a model call. *Planned:* Guardrails, tool calling, structured outputs.
 - **Observability**: JSON structured logs with a per-request `X-Request-ID`. *Planned:* OpenTelemetry, ADOT collector, CloudWatch, X-Ray.
-- **Infra**: Docker Compose (local). AWS CDK with three stacks, deployed by hand after review and never by CI: `BudgetStack` (cost alerts), `KnowledgeBaseStack` (Bedrock KB, S3 docs bucket, S3 Vectors) and `AuthStack` (Cognito user pool, groups, hosted UI). Deploys use a scoped CloudFormation execution policy (`infra/bootstrap/`) instead of the default AdministratorAccess. *Planned:* ECS Fargate for the API, S3 + CloudFront for the web app.
+- **Infra**: Docker Compose (local). AWS CDK with three stacks, never deployed by CI. **Deployed** (by hand, after `cdk diff` review): `KnowledgeBaseStack` (Bedrock KB, S3 docs bucket, S3 Vectors) and `AuthStack` (Cognito user pool, groups, hosted UI). Both deploy through a scoped CloudFormation execution policy (`infra/bootstrap/`) instead of the default AdministratorAccess. **Defined and tested but not deployed:** `BudgetStack` (cost alerts). The live $15 budget was created by hand in the AWS console, and the scoped execution policy doesn't cover `BudgetStack`. *Planned:* ECS Fargate for the API, S3 + CloudFront for the web app.
 - **CI/CD**: GitHub Actions (lint, typecheck, unit and integration tests, Docker build check, CDK synth on every push)
 
 See [DECISIONS.md](DECISIONS.md) for why each of these was chosen and what was rejected.
@@ -82,7 +82,7 @@ See [DECISIONS.md](DECISIONS.md) for why each of these was chosen and what was r
 
 | Phase | Delivers | Status |
 | --- | --- | --- |
-| 0 | Monorepo scaffolding: repo layout, Docker Compose (Postgres, DynamoDB Local, API), GitHub Actions CI skeleton, CDK `BudgetStack` for cost alerts | **Done**: `docker-compose.yml`, `.github/workflows/ci.yml`, `infra/lib/budget-stack.ts` |
+| 0 | Monorepo scaffolding: repo layout, Docker Compose (Postgres, DynamoDB Local, API), GitHub Actions CI skeleton, CDK `BudgetStack` for cost alerts | **Done**: `docker-compose.yml`, `.github/workflows/ci.yml`, `infra/lib/budget-stack.ts` (defined and tested; not deployed, see Cost and teardown) |
 | 1 | Data layer: Postgres schema (sellers, listings, orders, order_items, support_cases) via SQLAlchemy + Alembic, DynamoDB chat store, deterministic seed script, refund-request service with row-level locking | **Done**: `models.py`, 2 Alembic migrations (reversibility checked in CI), `dynamo/chat_repository.py`, `scripts/seed.py`, `services/refunds.py` (`SELECT … FOR UPDATE`, concurrency test) |
 | 2 | API: Cognito JWT verification and role-based access, REST endpoints under `/v1`, RFC 9457 `application/problem+json` errors, OpenAPI contract exported and checked in CI, 85% coverage gate | **Done**: `auth.py`, `routers/`, `errors.py`, OpenAPI drift check and 85% gate in CI |
 | 3 | Frontend: Next.js static export, Cognito Authorization Code + PKCE login, generated TypeScript API client, seller and admin pages (orders, cases, chat, admin case queue), accessibility (Lighthouse 100/100 on the pages audited), Vitest test suite | **Done**: `apps/web`, `packages/api-client`; Vitest in CI |
@@ -107,7 +107,7 @@ Every non-obvious choice in this repo, what it does, why it was chosen over the 
 | `services/api` | FastAPI backend |
 | `services/ingest` | Placeholder. Ingestion is done by Bedrock Knowledge Bases: `make kb-upload` (S3 sync) and `make kb-ingest` (ingestion job) |
 | `packages/api-client` | TypeScript API client generated from `services/api/openapi.json` |
-| `infra` | AWS CDK app with three stacks: `BudgetStack`, `KnowledgeBaseStack`, `AuthStack`. CI builds, tests and synths them; deploying is a manual, reviewed step |
+| `infra` | AWS CDK app with three stacks. CI builds, tests and synths all three; deploying is a manual, reviewed step. `KnowledgeBaseStack` and `AuthStack` are deployed; `BudgetStack` isn't |
 | `evals` | Golden question set, retrieval calibration and answer eval scripts; results in `evals/results/` (run by hand against live Bedrock) |
 | `data` | Synthetic sample data, including the fictional marketplace's policy docs used by seeding and the Bedrock Knowledge Base |
 | `DECISIONS.md` | What each component does, why it was chosen, and what was rejected |
@@ -198,8 +198,7 @@ Other targets: `make down` (stop containers, keeps the Postgres volume), `make o
 
 - Local development costs nothing. `make down` stops containers; `docker compose down -v` also deletes the Postgres volume.
 - Nothing is deployed to AWS automatically. CI only runs `cdk synth`.
-- Deploy the budget first so spend is tracked from day one (default 25 USD/month, email alerts at 50%, 80%, 100% actual and 100% forecasted):
-  `cd infra && npx cdk deploy BudgetStack -c budgetEmail=you@example.com`
+- Budget: `BudgetStack` (default 25 USD/month, email alerts at 50%, 80%, 100% actual and 100% forecasted) is defined and tested but **not deployed**. The scoped CloudFormation execution policy grants no `budgets:` actions, so `cdk deploy BudgetStack` fails through this account's bootstrap. The live budget was created by hand in the AWS console at $15 (DECISIONS.md, Known open issues, "Budget amount mismatch").
 - Teardown: `cd infra && npx cdk destroy --all -c budgetEmail=you@example.com`. Bedrock, databases and Fargate are billable; destroy them when not in use.
 
 ## Results
